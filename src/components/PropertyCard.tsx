@@ -21,6 +21,11 @@ const PropertyCard = ({ property }: { property: Property }) => {
   const { formatPrice } = useCurrency();
   
   const images = (property.images && property.images.length > 0) ? property.images : ['/placeholder-property.jpg'];
+  const infoText = `${property.title} ${property.location}`.toLowerCase();
+  const showToday = /on show|open house|viewing today/i.test(infoText);
+  const priceReduced = /reduced|discount|offer/i.test(infoText);
+  const readyTitle = /title deed/i.test(infoText);
+  const verified = /verified/i.test(infoText);
 
   const nextImage = (e?: MouseEvent) => {
     e?.preventDefault();
@@ -50,6 +55,20 @@ const PropertyCard = ({ property }: { property: Property }) => {
       className="group relative bg-card text-foreground border border-border overflow-hidden rounded-sm shadow-sm hover:shadow-xl transition-all duration-300"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
+        <div className="absolute top-2 left-2 flex gap-2 z-10">
+          {showToday && (
+            <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-sm bg-blue-600 text-white">On Show Today</span>
+          )}
+          {priceReduced && (
+            <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-sm bg-red-600 text-white">Price Reduced</span>
+          )}
+          {readyTitle && (
+            <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-sm bg-green-600 text-white">Ready Title</span>
+          )}
+          {verified && (
+            <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-sm bg-primary text-primary-foreground">Verified</span>
+          )}
+        </div>
         {/* Image Carousel */}
         <AnimatePresence initial={false} mode="popLayout">
           <motion.img
@@ -106,6 +125,9 @@ const PropertyCard = ({ property }: { property: Property }) => {
           <div className="flex items-center gap-1 text-muted-foreground text-xs tracking-widest uppercase">
             <MapPin className="w-3 h-3 text-primary" />
             <span className="truncate">{property.location}</span>
+          </div>
+          <div className="mt-2 flex gap-2">
+            <span className="text-[10px] uppercase px-2 py-1 rounded-sm bg-muted text-foreground">Residential Zoning</span>
           </div>
         </div>
         

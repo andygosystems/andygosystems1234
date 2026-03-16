@@ -306,6 +306,25 @@ const PropertyDetails = () => {
                   <div className="mt-6 pt-6 border-t border-border">
                     <CurrencyCalculator />
                   </div>
+                  
+                  <div className="mt-6">
+                    {(() => {
+                      const agentPhone = '254700000000';
+                      const propertyLink = `${window.location.origin}/property/${property.id}`;
+                      const message = encodeURIComponent(`Hello! I'm interested in "${property.title}". Here is the link: ${propertyLink}`);
+                      const waUrl = `https://wa.me/${agentPhone}?text=${message}`;
+                      return (
+                        <a
+                          href={waUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full inline-flex justify-center bg-green-500 text-white font-bold py-3 rounded-sm uppercase tracking-wide hover:bg-green-600 transition-colors text-sm"
+                        >
+                          Contact Agent on WhatsApp
+                        </a>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
               

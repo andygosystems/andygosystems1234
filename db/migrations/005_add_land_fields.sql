@@ -1,0 +1,17 @@
+ALTER TABLE properties
+  ADD COLUMN land_category ENUM('Residential','Commercial','Agricultural','Industrial') DEFAULT NULL,
+  ADD COLUMN tenure_type ENUM('Freehold','Leasehold_99','Leasehold_999') DEFAULT NULL,
+  ADD COLUMN plot_size ENUM('50x100','1_8_acre','1_4_acre','1_2_acre','full_acre') DEFAULT NULL,
+  ADD COLUMN doc_ready_title TINYINT(1) DEFAULT 0,
+  ADD COLUMN doc_allotment_letter TINYINT(1) DEFAULT 0,
+  ADD COLUMN doc_search_conducted TINYINT(1) DEFAULT 0,
+  ADD COLUMN invest_fenced TINYINT(1) DEFAULT 0,
+  ADD COLUMN invest_beacons TINYINT(1) DEFAULT 0,
+  ADD COLUMN invest_borehole TINYINT(1) DEFAULT 0,
+  ADD COLUMN invest_electricity TINYINT(1) DEFAULT 0,
+  ADD COLUMN proximity_near_main_road TINYINT(1) DEFAULT 0,
+  ADD COLUMN proximity_distance_cbd INT DEFAULT NULL,
+  ADD COLUMN proximity_future_infra TINYINT(1) DEFAULT 0,
+  ADD COLUMN topography ENUM('Flat','Sloped','RedSoil') DEFAULT NULL,
+  ADD COLUMN payment_plan ENUM('Cash','Installments','BankFinancing') DEFAULT NULL,
+  ADD COLUMN verified_listing TINYINT(1) DEFAULT 0;

@@ -53,6 +53,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     { path: '/admin/properties/add', icon: PlusCircle, label: 'Add Property' },
     { path: '/admin/leads', icon: MessageSquare, label: 'Leads Management' },
     { path: '/admin/chats', icon: Bot, label: 'AI Conversations' },
+    { path: '/admin/crm', icon: LayoutDashboard, label: 'CRM Analytics' },
   ];
 
   return (

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../lib/api';
+import { supabaseCrmService } from '../services/supabaseCrmService';
 
 export interface ChatMessage {
   text: string;
@@ -7,6 +8,7 @@ export interface ChatMessage {
   timestamp: string;
   isAction?: boolean;
   propertyId?: string | number;
+  leadId?: string;
 }
 
 export interface ChatSession {
@@ -17,6 +19,7 @@ export interface ChatSession {
   status: 'active' | 'archived';
   userName?: string;
   userPhone?: string;
+  leadId?: string;
 }
 
 interface ChatContextType {
@@ -24,8 +27,8 @@ interface ChatContextType {
   allSessions: ChatSession[];
   currentSessionId: string | null;
   setCurrentSessionId: (id: string) => void;
-  startSession: (userName?: string, userPhone?: string) => string;
-  addMessage: (sessionId: string, text: string, isBot: boolean, isAction?: boolean, propertyId?: string | number) => void;
+  startSession: (userName?: string, userPhone?: string) => Promise<string>;
+  addMessage: (sessionId: string, text: string, isBot: boolean, isAction?: boolean, propertyId?: string | number) => Promise<void>;
   deleteSession: (sessionId: string) => void;
   getStats: () => { totalSessions: number; totalMessages: number };
 }
@@ -48,7 +51,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadChats = async () => {
     try {
       const data = await api.getChats();
-      // Ensure data matches interface
       const mapped = data.map((s: any) => ({
         id: s.id,
         startTime: s.startTime || s.start_time,
@@ -56,7 +58,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         messages: s.messages || [],
         status: s.status || 'active',
         userName: s.userName,
-        userPhone: s.userPhone
+        userPhone: s.userPhone,
+        leadId: s.leadId || s.lead_id
       }));
       setAllSessions(mapped);
     } catch (e) {
@@ -66,13 +69,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     loadChats();
-    // Do not load from localStorage to allow refresh to clear session
-    // const savedSessionId = localStorage.getItem('krugerr_current_session_id');
-    // if (savedSessionId) {
-    //   setCurrentSessionId(savedSessionId);
-    // }
 
-    // Listen for storage changes (cross-tab sync for local mode)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'krugerr_chats') {
         loadChats();
@@ -80,9 +77,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     window.addEventListener('storage', handleStorageChange);
-    
-    // Poll for updates every 10 seconds (for Admin view when using API)
-    const pollInterval = setInterval(loadChats, 10000);
+    const pollInterval = setInterval(loadChats, 30000);
     
     return () => {
       window.removeEventListener('storage', handleStorageChange);
@@ -96,7 +91,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentSessionId]);
 
-  const startSession = (userName?: string, userPhone?: string) => {
+  const startSession = async (userName?: string, userPhone?: string) => {
+    let leadId: string | undefined;
+    
+    // 1. Register/Identify Lead in Supabase
+    if (userName) {
+      try {
+        const lead = await supabaseCrmService.startChatSession(userName, userPhone);
+        leadId = lead.id;
+      } catch (err) {
+        console.error("Supabase Lead Error:", err);
+      }
+    }
+
     const newSessionId = Math.random().toString(36).substr(2, 9);
     const newSession: ChatSession = {
       id: newSessionId,
@@ -105,45 +112,58 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       messages: [],
       status: 'active',
       userName,
-      userPhone
+      userPhone,
+      leadId
     };
+
     setAllSessions(prev => [newSession, ...prev]);
     setCurrentSessionId(newSessionId);
     
-    // Update My Sessions
     const updatedMySessions = [...mySessionIds, newSessionId];
     setMySessionIds(updatedMySessions);
     localStorage.setItem('krugerr_my_sessions', JSON.stringify(updatedMySessions));
     
-    // Sync to backend/storage
     api.startChatSession(newSession).catch(err => console.error("Failed to start session remotely", err));
     
     return newSessionId;
   };
 
-  const addMessage = (sessionId: string, text: string, isBot: boolean, isAction?: boolean, propertyId?: string | number) => {
+  const addMessage = async (sessionId: string, text: string, isBot: boolean, isAction?: boolean, propertyId?: string | number) => {
+    const session = allSessions.find(s => s.id === sessionId);
     const newMessage: ChatMessage = {
       text,
       isBot,
       timestamp: new Date().toISOString(),
       isAction,
-      propertyId
+      propertyId,
+      leadId: session?.leadId
     };
 
-    setAllSessions(prev => prev.map(session => {
-      if (session.id === sessionId) {
+    setAllSessions(prev => prev.map(s => {
+      if (s.id === sessionId) {
         return {
-          ...session,
-          messages: [...session.messages, newMessage],
+          ...s,
+          messages: [...s.messages, newMessage],
           lastMessageTime: new Date().toISOString()
         };
       }
-      return session;
+      return s;
     }));
 
-    // Sync to backend/storage
+    // 1. Sync to Inbuilt Backend
     api.addChatMessage(sessionId, newMessage).catch(err => console.error("Failed to add message remotely", err));
+
+    // 2. Log to Supabase for AI Tracking
+    if (session?.leadId) {
+      supabaseCrmService.logMessage({
+        lead_id: session.leadId,
+        role: isBot ? 'assistant' : 'user',
+        content: text,
+        metadata: { isAction, propertyId }
+      }).catch(err => console.error("Supabase Log Error:", err));
+    }
   };
+
 
   const deleteSession = (sessionId: string) => {
      setAllSessions(prev => prev.filter(s => s.id !== sessionId));

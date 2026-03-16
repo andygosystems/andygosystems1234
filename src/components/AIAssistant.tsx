@@ -46,36 +46,27 @@ const AIAssistant = () => {
   //   }
   // }, [currentSessionId]);
 
-  const handleRegistrationSubmit = (e: React.FormEvent) => {
+  const handleRegistrationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const form = e.target as HTMLFormElement;
     const name = (form.elements.namedItem('name') as HTMLInputElement).value;
     const phone = (form.elements.namedItem('phone') as HTMLInputElement).value;
 
     if (name && phone) {
-      const id = startSession(name, phone);
+      const id = await startSession(name, phone);
       setRegistration({ name, phone });
       setViewMode('chat');
-      addMessage(id, `Hello ${name}! Welcome to Krugerr Brendt. I'm your luxury real estate assistant. How can I help you find your dream property today?`, true);
+      await addMessage(id, `Hello ${name}! Welcome to Krugerr Brendt. I'm your luxury real estate assistant. How can I help you find your dream property today?`, true);
     }
   };
 
-  const startNewChat = () => {
-    // When starting a new chat manually, we might want to keep the registration? 
-    // Or ask again? Usually keeping it is better UX for "New Chat" button.
-    // But user asked to REMOVE "Clear Chat" button inside the tool.
-    // However, if we do have a way to restart, we should decide.
-    // User said "remove the clear chat button inside that ai tool".
-    // So we just won't expose this function in the UI via a button.
-    
-    // But for internal logic (like "clear" command), we can keep it.
+  const startNewChat = async () => {
     if (registration) {
-        const id = startSession(registration.name, registration.phone);
+        const id = await startSession(registration.name, registration.phone);
         setContextProperty(null);
         setViewMode('chat');
-        addMessage(id, `Hello ${registration.name}! How can I help you further?`, true);
+        await addMessage(id, `Hello ${registration.name}! How can I help you further?`, true);
     } else {
-        // Should not happen if logic is correct
         setRegistration(null);
     }
   };
@@ -117,7 +108,7 @@ const AIAssistant = () => {
     window.open(url, '_blank');
   };
 
-  const handleSend = (e?: React.FormEvent) => {
+  const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim()) return;
 
@@ -125,18 +116,18 @@ const AIAssistant = () => {
     // Ensure we have a session
     let sessionId = currentSessionId;
     if (!sessionId) {
-      startNewChat();
+      await startNewChat();
       sessionId = currentSessionId; 
     }
     
     // Safety check if session ID is missing
     if (!sessionId && sessions.length > 0) sessionId = sessions[0].id;
 
-    addMessage(sessionId!, userMsg, false);
+    await addMessage(sessionId!, userMsg, false);
     setInput("");
 
     // Simulate AI response with Smart Logic
-    setTimeout(() => {
+    setTimeout(async () => {
       const lowerMsg = userMsg.toLowerCase();
       let responseText = "";
       let isAction = false;
@@ -144,7 +135,7 @@ const AIAssistant = () => {
       
       // 0. System Commands
       if (lowerMsg === 'clear' || lowerMsg === 'reset' || lowerMsg.includes('new chat')) {
-         startNewChat();
+         await startNewChat();
          return;
       }
 
@@ -247,7 +238,7 @@ const AIAssistant = () => {
         responseText = "I see. To help me serve you better, could you mention if you're interested in buying, renting, or a specific location? Or feel free to ask to speak with an agent.";
       }
 
-      addMessage(sessionId!, responseText, true, isAction, propertyId);
+      addMessage(sessionId!, responseText, true, isAction, propertyId).catch(err => console.error(err));
     }, 800);
   };
 

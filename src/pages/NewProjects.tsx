@@ -5,7 +5,7 @@ import { Download, Calendar, MapPin, CheckCircle2, ArrowRight } from 'lucide-rea
 import { useProject } from '../context/ProjectContext';
 
 const NewProjectsPage = () => {
-  const { projects } = useProject();
+  const { projects, loading } = useProject();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -40,7 +40,12 @@ const NewProjectsPage = () => {
       </div>
 
       <main className="flex-grow">
-        {projects.length === 0 ? (
+        {loading ? (
+           <div className="flex flex-col items-center justify-center py-24">
+             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+             <p className="text-muted-foreground font-light tracking-wide">Loading exclusive projects...</p>
+           </div>
+        ) : projects.length === 0 ? (
            <div className="py-24 text-center">
              <h2 className="text-2xl font-serif text-muted-foreground">No new projects at the moment.</h2>
              <p className="text-muted-foreground mt-2">Check back soon for upcoming developments.</p>

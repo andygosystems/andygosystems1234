@@ -3,13 +3,26 @@ import { useProject } from '../../context/ProjectContext';
 import { Plus, Trash2, Edit, Calendar, FileText } from 'lucide-react';
 
 const AdminProjects = () => {
-  const { projects, deleteProject } = useProject();
+  const { projects, deleteProject, loading } = useProject();
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this project?')) {
-      deleteProject(id);
+      try {
+        await deleteProject(id);
+        alert('Project deleted successfully');
+      } catch (e) {
+        alert('Failed to delete project');
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div>

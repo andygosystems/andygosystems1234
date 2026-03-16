@@ -25,6 +25,9 @@ import Leads from './pages/Admin/Leads';
 import AdminChats from './pages/Admin/Chats';
 import AdminProjects from './pages/Admin/Projects';
 import AddProject from './pages/Admin/AddProject';
+import SyncUpload from './pages/Admin/SyncUpload';
+import AgencySync from './pages/Admin/AgencySync';
+import CRM from './pages/Admin/CRM';
 
 function App() {
   return (
@@ -55,6 +58,22 @@ function App() {
             <Route path="/admin/properties" element={
               <AdminLayout>
                 <AdminProperties />
+              </AdminLayout>
+            } />
+            
+            <Route path="/admin/properties/sync" element={
+              <AdminLayout>
+                <SyncUpload />
+              </AdminLayout>
+            } />
+            <Route path="/admin/properties/agency-sync" element={
+              <AdminLayout>
+                <AgencySync />
+              </AdminLayout>
+            } />
+            <Route path="/admin/crm" element={
+              <AdminLayout>
+                <CRM />
               </AdminLayout>
             } />
             

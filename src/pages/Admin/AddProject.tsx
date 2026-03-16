@@ -141,9 +141,11 @@ const AddProject = () => {
       };
 
       if (isEditMode && id) {
-        updateProject(id, projectData);
+        await updateProject(id, projectData);
+        alert('Project updated successfully');
       } else {
-        addProject(projectData);
+        await addProject(projectData);
+        alert('Project added successfully');
       }
 
       navigate('/admin/projects');

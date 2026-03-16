@@ -29,18 +29,7 @@
     --color-input: 30 30 30;
   }
 
-  [data-theme='coastal'] {
-    /* Coastal Platinum */
-    --color-bg: 15 23 42; /* #0f172a (Slate 900) */
-    --color-text: 241 245 249; /* #f1f5f9 */
-    --color-text-muted: 148 163 184; /* slate-400 */
-    --color-primary: 203 213 225; /* #cbd5e1 (Silver/Platinum) */
-    --color-primary-foreground: 15 23 42; /* Dark text on Silver */
-    --color-secondary: 30 41 59; /* #1e293b (Slate 800) */
-    --color-border: 51 65 85; /* slate-700 */
-    --color-card: 30 41 59;
-    --color-input: 51 65 85;
-  }
+  
 
   body {
     @apply antialiased font-sans transition-colors duration-300;

@@ -1,23 +1,23 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { properties as initialProperties, Property } from '../data/properties';
+import { Property } from '../data/properties';
+import { api } from '../lib/api';
 
 // Extend Property type to include optional fields for analytics/management
 export interface ExtendedProperty extends Property {
   visits?: number;
-  isLocal?: boolean; // True if created via Admin Dashboard (stored in localStorage)
+  isLocal?: boolean; // True if created via Admin Dashboard
   dateAdded?: string;
   status?: 'available' | 'sold' | 'rented';
-  supabaseId?: string; // ID from Supabase (unused in demo mode)
 }
 
 interface PropertyContextType {
   properties: ExtendedProperty[];
   loading: boolean;
-  addProperty: (property: ExtendedProperty) => Promise<void>;
-  updateProperty: (id: string, updates: Partial<ExtendedProperty>) => Promise<void>;
-  deleteProperty: (id: string) => Promise<void>;
-  getPropertyById: (id: string) => ExtendedProperty | undefined;
-  incrementVisits: (id: string) => void;
+  addProperty: (property: any) => Promise<void>;
+  updateProperty: (id: string | number, updates: any) => Promise<void>;
+  deleteProperty: (id: string | number) => Promise<void>;
+  getPropertyById: (id: string | number) => ExtendedProperty | undefined;
+  incrementVisits: (id: string | number) => void;
   getStats: () => { totalProperties: number; totalVisits: number; totalInquiries: number };
 }
 
@@ -27,48 +27,31 @@ export const PropertyProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [properties, setProperties] = useState<ExtendedProperty[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load properties from LocalStorage + Hardcoded (standalone demo mode)
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const res = await api.getProperties();
+      const allProps = (res.data || []).map((p: any) => ({
+        ...p,
+        id: String(p.id),
+        // Ensure price is a string for the Property interface
+        price: typeof p.price === 'number' ? `KES ${p.price.toLocaleString()}` : String(p.price || '0'),
+        visits: p.visits || 0,
+        status: p.status || 'available',
+        dateAdded: p.dateAdded || new Date().toISOString()
+      }));
+      setProperties(allProps);
+    } catch (error) {
+      console.error("Failed to load property data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-
-        // 1. Get Local Properties (Admin created)
-        const localPropsStr = localStorage.getItem('kb_properties');
-        const localProps: ExtendedProperty[] = localPropsStr ? JSON.parse(localPropsStr) : [];
-        
-        // 2. Get Analytics (Visits)
-        const analyticsStr = localStorage.getItem('kb_analytics');
-        const analytics: Record<string, number> = analyticsStr ? JSON.parse(analyticsStr) : {};
-
-        // 3. Merge Hardcoded Properties with Analytics
-        
-        const hardcodedPropsWithStats = initialProperties.map(p => ({
-          ...p,
-          visits: analytics[p.id] || 0,
-          isLocal: false,
-          status: 'available' as const
-        }));
-
-        const localPropsWithStats = localProps.map(p => ({
-          ...p,
-          visits: analytics[p.id] || 0,
-          isLocal: true
-        }));
-
-        const allProps = [...localPropsWithStats, ...hardcodedPropsWithStats];
-        setProperties(allProps);
-      } catch (error) {
-        console.error("Failed to load property data:", error);
-        setProperties(initialProperties);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadData();
 
-    // Listen for storage changes (cross-tab sync for local mode)
+    // Listen for storage changes (for local fallback if still used)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'kb_properties' || e.key === 'kb_analytics') {
         loadData();
@@ -77,75 +60,67 @@ export const PropertyProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     window.addEventListener('storage', handleStorageChange);
     
+    // Poll for updates in admin view
+    const interval = setInterval(loadData, 30000);
+    
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
     };
   }, []);
 
-  // Save Local Properties to LocalStorage
-  const saveLocalProperties = (updatedProperties: ExtendedProperty[]) => {
-    const localOnly = updatedProperties.filter(p => p.isLocal);
-    localStorage.setItem('kb_properties', JSON.stringify(localOnly));
-    setProperties(updatedProperties);
+  const addProperty = async (newProperty: any) => {
+    setLoading(true);
+    try {
+      await api.addProperty(newProperty);
+      await loadData();
+    } catch (e) {
+      console.error("Failed to add property", e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const addProperty = async (newProperty: ExtendedProperty) => {
-    // Local Storage only (demo mode)
-    const propertyWithMeta = {
-      ...newProperty,
-      id: newProperty.id || Date.now().toString(),
-      isLocal: true,
-      visits: 0,
-      dateAdded: new Date().toISOString()
-    };
-    const updated = [propertyWithMeta, ...properties];
-    saveLocalProperties(updated);
+  const updateProperty = async (id: string | number, updates: any) => {
+    setLoading(true);
+    try {
+      await api.updateProperty(id, updates);
+      await loadData();
+    } catch (e) {
+      console.error("Failed to update property", e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const updateProperty = async (id: string, updates: Partial<ExtendedProperty>) => {
-    // Update Local State & Storage (demo mode)
-    const updatedProps = properties.map(p => 
-      p.id === id ? { ...p, ...updates } : p
-    );
-    
-    saveLocalProperties(updatedProps);
+  const deleteProperty = async (id: string | number) => {
+    setLoading(true);
+    try {
+      await api.deleteProperty(id);
+      await loadData();
+    } catch (e) {
+      console.error("Failed to delete property", e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const deleteProperty = async (id: string) => {
-    const updatedProps = properties.filter(p => p.id !== id);
-    saveLocalProperties(updatedProps);
+  const getPropertyById = (id: string | number) => {
+    return properties.find(p => String(p.id) === String(id));
   };
 
-
-
-  const getPropertyById = (id: string) => {
-    return properties.find(p => p.id === id);
-  };
-
-  const incrementVisits = (id: string) => {
-    setProperties(prev => {
-      const updated = prev.map(p => {
-        if (p.id === id) {
-          return { ...p, visits: (p.visits || 0) + 1 };
-        }
-        return p;
-      });
-      
-      // Update Analytics Storage
-      const analyticsStr = localStorage.getItem('kb_analytics');
-      const analytics = analyticsStr ? JSON.parse(analyticsStr) : {};
-      analytics[id] = (analytics[id] || 0) + 1;
-      localStorage.setItem('kb_analytics', JSON.stringify(analytics));
-
-      return updated;
-    });
+  const incrementVisits = (id: string | number) => {
+    // Analytics tracking could be an API call too
+    setProperties(prev => prev.map(p => 
+      String(p.id) === String(id) ? { ...p, visits: (p.visits || 0) + 1 } : p
+    ));
   };
 
   const getStats = () => {
     const totalProperties = properties.length;
     const totalVisits = properties.reduce((acc, curr) => acc + (curr.visits || 0), 0);
-    // Inquiries would typically come from another context/storage, but for now we'll placeholder it
-    // or fetch from CRM storage if possible.
+    
+    // Get inquiries count from leads storage if available
     const inquiriesStr = localStorage.getItem('kb_leads');
     const totalInquiries = inquiriesStr ? JSON.parse(inquiriesStr).length : 0;
 

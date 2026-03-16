@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { uuidv4 } from '../lib/utils';
+import { api } from '../lib/api';
 
 export interface Project {
   id: string;
@@ -18,10 +18,12 @@ export interface Project {
 
 interface ProjectContextType {
   projects: Project[];
-  addProject: (project: Omit<Project, 'id' | 'createdAt'>) => void;
-  updateProject: (id: string, project: Partial<Project>) => void;
-  deleteProject: (id: string) => void;
+  loading: boolean;
+  addProject: (project: Omit<Project, 'id' | 'createdAt'>) => Promise<void>;
+  updateProject: (id: string, project: Partial<Project>) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
   getProjectById: (id: string) => Project | undefined;
+  refreshProjects: () => Promise<void>;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -35,107 +37,69 @@ export const useProject = () => {
 };
 
 export const ProjectProvider = ({ children }: { children: ReactNode }) => {
-  const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem('kb_projects');
-    if (saved) return JSON.parse(saved);
-    
-    // Default Seed Data
-    return [
-      {
-        id: '1',
-        title: "Vipingo Development",
-        location: "Vipingo, Kilifi",
-        description: "An exclusive gated community featuring modern swahili-inspired villas, an 18-hole golf course, and private beach access. The epitome of coastal luxury living.",
-        progress: 75,
-        status: "Under Construction",
-        estimatedCompletion: "2026-12-31",
-        startDate: "2024-01-01",
-        autoProgress: false,
-        images: ["https://images.unsplash.com/photo-1613490493576-7fde63acd811?q=80&w=2071&auto=format&fit=crop"],
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: '2',
-        title: "The Nairobi Heights",
-        location: "Upper Hill, Nairobi",
-        description: "A 35-story residential tower redefining the Nairobi skyline. Smart-home enabled apartments with panoramic city views and world-class amenities.",
-        progress: 40,
-        status: "Under Construction",
-        estimatedCompletion: "2027-06-30",
-        startDate: "2025-01-01",
-        autoProgress: true,
-        images: ["https://images.unsplash.com/photo-1486325212027-8081e485255e?q=80&w=2070&auto=format&fit=crop"],
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: '3',
-        title: "Dubai Marina Pearl",
-        location: "Dubai Marina, UAE",
-        description: "Ultra-luxury waterfront residences. Experience the future of living with sustainable architecture and unparalleled service in the heart of Dubai.",
-        progress: 90,
-        status: "Completed",
-        estimatedCompletion: "2026-03-31",
-        startDate: "2023-01-01",
-        autoProgress: false,
-        images: ["https://images.unsplash.com/photo-1512453979798-5ea904ac66de?q=80&w=2009&auto=format&fit=crop"],
-        createdAt: new Date().toISOString()
-      }
-    ];
-  });
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    localStorage.setItem('kb_projects', JSON.stringify(projects));
-  }, [projects]);
-
-  // Auto-update progress for autoProgress projects
-  useEffect(() => {
-    const updateProgress = () => {
-      setProjects(prevProjects => prevProjects.map(project => {
-        if (project.autoProgress && project.status !== 'Completed') {
-          const start = new Date(project.startDate).getTime();
-          const end = new Date(project.estimatedCompletion).getTime();
-          const now = new Date().getTime();
-          
-          if (now >= end) {
-             return { ...project, progress: 100 };
-          }
-          
-          if (now <= start) {
-            return { ...project, progress: 0 };
-          }
-
-          const totalDuration = end - start;
-          const elapsed = now - start;
-          const newProgress = Math.min(Math.round((elapsed / totalDuration) * 100), 100);
-          
-          if (newProgress !== project.progress) {
-            return { ...project, progress: newProgress };
-          }
-        }
-        return project;
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getProjects();
+      const normalized = (data || []).map((p: any) => ({
+        id: String(p.id),
+        title: p.title,
+        location: p.location,
+        description: p.description,
+        images: Array.isArray(p.images) ? p.images : [],
+        brochureUrl: p.brochure_url,
+        estimatedCompletion: p.estimated_completion,
+        startDate: p.start_date,
+        progress: p.progress,
+        autoProgress: !!p.auto_progress,
+        status: p.status,
+        createdAt: p.created_at
       }));
-    };
+      setProjects(normalized);
+    } catch (e) {
+      console.error("Failed to load projects:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    updateProgress(); // Run on mount
-    const interval = setInterval(updateProgress, 1000 * 60 * 60); // Run every hour
+  useEffect(() => {
+    loadData();
+    // Poll for updates every 30 seconds
+    const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const addProject = (projectData: Omit<Project, 'id' | 'createdAt'>) => {
-    const newProject: Project = {
-      ...projectData,
-      id: uuidv4(),
-      createdAt: new Date().toISOString(),
-    };
-    setProjects(prev => [newProject, ...prev]);
+  const addProject = async (project: Omit<Project, 'id' | 'createdAt'>) => {
+    try {
+      await api.addProject(project);
+      await loadData();
+    } catch (e) {
+      console.error("Failed to add project", e);
+    }
   };
 
-  const updateProject = (id: string, updates: Partial<Project>) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  const updateProject = async (id: string, updates: Partial<Project>) => {
+    try {
+      const current = projects.find(p => p.id === id);
+      if (!current) return;
+      await api.updateProject(id, { ...current, ...updates });
+      await loadData();
+    } catch (e) {
+      console.error("Failed to update project", e);
+    }
   };
 
-  const deleteProject = (id: string) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
+  const deleteProject = async (id: string) => {
+    try {
+      await api.deleteProject(id);
+      await loadData();
+    } catch (e) {
+      console.error("Failed to delete project", e);
+    }
   };
 
   const getProjectById = (id: string) => {
@@ -143,7 +107,15 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <ProjectContext.Provider value={{ projects, addProject, updateProject, deleteProject, getProjectById }}>
+    <ProjectContext.Provider value={{ 
+      projects, 
+      loading, 
+      addProject, 
+      updateProject, 
+      deleteProject, 
+      getProjectById,
+      refreshProjects: loadData
+    }}>
       {children}
     </ProjectContext.Provider>
   );

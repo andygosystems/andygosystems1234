@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, MapPin, Home, DollarSign, ChevronDown } from 'lucide-react';
+import { Search, MapPin, Home, DollarSign, ChevronDown, ShieldCheck, Fence, Car, Zap, Droplet, Wrench, Sun as SunIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const SmartSearch = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'buy' | 'rent'>('buy');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
 
   const handleSearch = () => {
     if (activeTab === 'buy') {
@@ -101,6 +103,44 @@ const SmartSearch = () => {
           Search
         </button>
       </div>
+      
+      <div className="mt-4">
+        <button
+          onClick={() => setShowAdvanced(v => !v)}
+          className="text-xs uppercase tracking-widest underline text-muted-foreground hover:text-primary"
+        >
+          {showAdvanced ? 'Hide Advanced Filters' : 'Show Advanced Filters'}
+        </button>
+      </div>
+      
+      {showAdvanced && (
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-card border border-border rounded-sm p-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Verified</h4>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={verifiedOnly} onChange={e => setVerifiedOnly(e.target.checked)} />
+              <ShieldCheck className="w-4 h-4" /> Verified Agents Only
+            </label>
+          </div>
+          <div className="bg-card border border-border rounded-sm p-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Security</h4>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <label className="flex items-center gap-2"><Fence className="w-4 h-4" /> Gated Community</label>
+              <label className="flex items-center gap-2"><Zap className="w-4 h-4" /> Electric Fence</label>
+              <label className="flex items-center gap-2"><Wrench className="w-4 h-4" /> CCTV</label>
+              <label className="flex items-center gap-2"><Car className="w-4 h-4" /> 24/7 Security</label>
+            </div>
+          </div>
+          <div className="bg-card border border-border rounded-sm p-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Utilities</h4>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <label className="flex items-center gap-2"><Droplet className="w-4 h-4" /> Borehole Water</label>
+              <label className="flex items-center gap-2"><Zap className="w-4 h-4" /> Back-up Generator</label>
+              <label className="flex items-center gap-2"><SunIcon className="w-4 h-4" /> Solar Ready</label>
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 };

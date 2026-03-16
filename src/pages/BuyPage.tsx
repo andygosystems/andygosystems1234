@@ -1,12 +1,51 @@
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PropertyCard from '../components/PropertyCard';
-import { useProperties } from '../hooks/useProperties';
+import { useProperty } from '../context/PropertyContext';
 import { motion } from 'framer-motion';
+import KenyaSearchFilters, { defaultFilters, KenyaFilters } from '../components/KenyaSearchFilters';
+import LandFilters, { LandFilters as LFilters } from '../components/LandFilters';
+import { useState } from 'react';
 
 const BuyPage = () => {
-  const { properties } = useProperties();
-  const saleProperties = properties.filter(p => p.type === 'Sale');
+  const { properties } = useProperty();
+  const [filters, setFilters] = useState<KenyaFilters>(defaultFilters);
+  const [landFilters, setLandFilters] = useState<LFilters>({});
+  const saleProperties = properties.filter(p => p.type === 'Sale').filter(p => {
+    const text = `${p.title} ${p.location} ${p.description} ${(p.amenities || []).join(' ')}`.toLowerCase();
+    // Verified Agents (heuristic): Exclusive Mandate or Verified keyword
+    if (filters.verifiedOnly && !text.includes('exclusive mandate') && !text.includes('verified')) return false;
+    // Security
+    if (filters.security.gatedCommunity && !text.includes('gated')) return false;
+    if (filters.security.electricFence && !text.includes('electric fence')) return false;
+    if (filters.security.cctv && !text.includes('cctv')) return false;
+    if (filters.security.dayNightSecurity && !text.includes('24/7 security') && !text.includes('24h security')) return false;
+    // Utilities
+    if (filters.utilities.boreholeWater && !text.includes('borehole')) return false;
+    if (filters.utilities.backupGenerator && !text.includes('backup generator')) return false;
+    if (filters.utilities.solarReady && !text.includes('solar')) return false;
+    // Land details (heuristics)
+    const isLand = /land|plot/i.test(p.title) || /land|plot/i.test(text);
+    if (filters.land.titleDeedReady && !(isLand && text.includes('title deed'))) return false;
+    if (filters.land.fenced && !(isLand && text.includes('fenced'))) return false;
+    if (filters.land.nearMainRoad && !(isLand && (text.includes('main road') || text.includes('tarmack')))) return false;
+    if (filters.land.plotSize !== 'any') {
+      const sizeOk = filters.land.plotSize === '1_8_acre'
+        ? /1\/8|eighth|0\.125\s?acre/i.test(text)
+        : /50x100|50 x 100|50 by 100/i.test(text);
+      if (!(isLand && sizeOk)) return false;
+    }
+    // Diaspora
+    if (filters.diaspora.readyForAirbnb && !text.includes('airbnb')) return false;
+    if (filters.diaspora.furnished && !text.includes('furnished')) return false;
+    if (filters.diaspora.installmentPayment && !(text.includes('installment') || text.includes('payment plan'))) return false;
+    // Location Intelligence
+    if (filters.locationGroup === 'nairobi_suburbs' && !/kilimani|lavington|karen|westlands|kileleshwa/i.test(p.location)) return false;
+    if (filters.locationGroup === 'satellite_towns' && !/ruiru|syokimau|kitengela|ngong|ongata/i.test(p.location)) return false;
+    if (filters.locationGroup === 'growth_corridors' && !/vipingo|tatu|konza|thika/i.test(text)) return false;
+    if (filters.town !== 'any' && !new RegExp(filters.town, 'i').test(p.location)) return false;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -41,12 +80,35 @@ const BuyPage = () => {
       </div>
 
       <main className="flex-grow container mx-auto px-6 py-16">
-        {/* Filters (Simplified) */}
-        <div className="flex flex-wrap gap-4 mb-12 justify-center">
-          <button className="px-6 py-2 bg-secondary text-secondary-foreground text-sm uppercase tracking-widest rounded-sm hover:bg-primary hover:text-secondary transition-colors">All</button>
-          <button className="px-6 py-2 bg-card border border-border text-muted-foreground text-sm uppercase tracking-widest rounded-sm hover:border-primary hover:text-primary transition-colors">Villas</button>
-          <button className="px-6 py-2 bg-card border border-border text-muted-foreground text-sm uppercase tracking-widest rounded-sm hover:border-primary hover:text-primary transition-colors">Apartments</button>
-          <button className="px-6 py-2 bg-card border border-border text-muted-foreground text-sm uppercase tracking-widest rounded-sm hover:border-primary hover:text-primary transition-colors">Land</button>
+        <KenyaSearchFilters value={filters} onChange={setFilters} />
+        <div className="h-4" />
+        <LandFilters value={landFilters} onChange={setLandFilters} />
+        <div className="h-4" />
+        <div className="flex flex-wrap gap-2 mb-6">
+          <button
+            onClick={() => setLandFilters(prev => ({ ...prev, plotSize: prev.plotSize === '50x100' ? 'any' : '50x100' }))}
+            className={`px-3 py-1 text-xs rounded-sm border ${landFilters.plotSize === '50x100' ? 'bg-primary text-primary-foreground' : 'bg-card border-border text-muted-foreground hover:bg-muted'}`}
+          >
+            50x100
+          </button>
+          <button
+            onClick={() => setLandFilters(prev => ({ ...prev, docReadyTitle: !prev.docReadyTitle }))}
+            className={`px-3 py-1 text-xs rounded-sm border ${landFilters.docReadyTitle ? 'bg-green-600 text-white' : 'bg-card border-border text-muted-foreground hover:bg-muted'}`}
+          >
+            Ready Title
+          </button>
+          <button
+            onClick={() => setLandFilters(prev => ({ ...prev, verified: !prev.verified }))}
+            className={`px-3 py-1 text-xs rounded-sm border ${landFilters.verified ? 'bg-primary text-primary-foreground' : 'bg-card border-border text-muted-foreground hover:bg-muted'}`}
+          >
+            Verified
+          </button>
+          <button
+            onClick={() => setLandFilters(prev => ({ ...prev, controlledDevelopment: !prev.controlledDevelopment }))}
+            className={`px-3 py-1 text-xs rounded-sm border ${landFilters.controlledDevelopment ? 'bg-primary text-primary-foreground' : 'bg-card border-border text-muted-foreground hover:bg-muted'}`}
+          >
+            Controlled Development
+          </button>
         </div>
 
         {/* Property Grid */}

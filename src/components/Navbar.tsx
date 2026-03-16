@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Sun, Moon, Cloud, Check } from 'lucide-react';
+import { Menu, X, Sun, Moon, Check } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import CurrencySelector from './CurrencySelector';
@@ -39,8 +39,7 @@ const Navbar = () => {
   
   const ThemeIcon = () => {
     if (theme === 'light') return <Sun size={20} />;
-    if (theme === 'dark') return <Moon size={20} />;
-    return <Cloud size={20} />;
+    return <Moon size={20} />;
   };
 
   return (
@@ -108,10 +107,7 @@ const Navbar = () => {
                   <span className="flex items-center gap-2"><Moon size={14} /> Midnight Exec</span>
                   {theme === 'dark' && <Check size={14} className="text-primary" />}
                 </button>
-                <button onClick={() => setTheme('coastal')} className="w-full flex items-center justify-between px-3 py-2 text-sm text-foreground hover:bg-muted rounded-sm">
-                  <span className="flex items-center gap-2"><Cloud size={14} /> Coastal Platinum</span>
-                  {theme === 'coastal' && <Check size={14} className="text-primary" />}
-                </button>
+                
               </div>
             </div>
 
@@ -186,13 +182,7 @@ const Navbar = () => {
                 >
                   <Moon size={28} />
                 </button>
-                <button 
-                  onClick={() => setTheme('coastal')} 
-                  className={cn("p-4 rounded-full border-2 min-h-[56px] min-w-[56px] flex items-center justify-center transition-all", theme === 'coastal' ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground")}
-                  aria-label="Coastal Mode"
-                >
-                  <Cloud size={28} />
-                </button>
+                
               </div>
             </div>
           </motion.div>
