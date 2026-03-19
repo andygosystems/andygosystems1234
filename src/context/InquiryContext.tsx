@@ -28,8 +28,12 @@ const InquiryContext = createContext<InquiryContextType | undefined>(undefined);
 
 export const InquiryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  const inFlight = React.useRef(false);
 
   const loadInquiries = async () => {
+    if (inFlight.current) return;
+    if (localStorage.getItem('kb_net_busy') === '1') return;
+    inFlight.current = true;
     try {
       const data = await api.getInquiries();
       // Map API response to local interface if needed
@@ -43,6 +47,8 @@ export const InquiryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setInquiries(mapped);
     } catch (e) {
       console.error("Failed to load inquiries", e);
+    } finally {
+      inFlight.current = false;
     }
   };
 
@@ -58,8 +64,8 @@ export const InquiryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     window.addEventListener('storage', handleStorageChange);
 
-    // Poll for updates every 15 seconds
-    const pollInterval = setInterval(loadInquiries, 15000);
+    // Poll for updates every 30 seconds
+    const pollInterval = setInterval(loadInquiries, 30000);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);

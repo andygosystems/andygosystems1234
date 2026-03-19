@@ -1,5 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { api } from '../lib/api';
+import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 
 export interface User {
@@ -14,130 +13,188 @@ interface AuthContextType {
   isAdmin: boolean;
   login: (email: string, pass: string) => Promise<void>;
   signOut: () => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('kb_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Check active session on mount
-    const checkSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
+  const asPromise = (value: any): Promise<any> => Promise.resolve(value as any);
 
-          if (profileError) {
-            console.warn("Could not fetch profile role:", profileError.message);
-          }
+  const withTimeout = async (promiseLike: any, ms: number): Promise<any> => {
+    return await Promise.race([
+      asPromise(promiseLike),
+      new Promise((_resolve, reject) => setTimeout(() => reject(new Error(`timeout_${ms}ms`)), ms)),
+    ]);
+  };
 
-          const userData: User = {
-            id: session.user.id,
-            email: session.user.email || '',
-            role: (profile?.role as any) || 'user'
-          };
-          setUser(userData);
-          localStorage.setItem('kb_user', JSON.stringify(userData));
-        } else {
-          setUser(null);
-          localStorage.removeItem('kb_user');
+  const isInvalidRefreshTokenError = (e: any) => {
+    const msg = String(e?.message || e || '').toLowerCase();
+    return msg.includes('invalid refresh token') || msg.includes('refresh token not found');
+  };
+
+  const clearAuthStorage = () => {
+    try {
+      const removeKeys = (store: Storage) => {
+        for (let i = store.length - 1; i >= 0; i--) {
+          const key = store.key(i);
+          if (!key) continue;
+          if (key.startsWith('sb-') && key.endsWith('-auth-token')) store.removeItem(key);
+          if (key === 'supabase.auth.token') store.removeItem(key);
         }
-      } catch (error) {
-        console.error("Session check error:", error);
-      } finally {
+      };
+      removeKeys(window.localStorage);
+      removeKeys(window.sessionStorage);
+    } catch {
+      return;
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const setFromSession = async () => {
+      try {
+        const { data, error } = await withTimeout(supabase.auth.getSession(), 12000);
+      if (cancelled) return;
+
+      if (error) {
+        if (isInvalidRefreshTokenError(error)) {
+          clearAuthStorage();
+          await supabase.auth.signOut({ scope: 'local' });
+        }
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      const session = data.session;
+      if (!session?.user) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile } = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .maybeSingle(),
+        12000
+      );
+
+      if (cancelled) return;
+
+      setUser({
+        id: session.user.id,
+        email: session.user.email || '',
+        role: (profile?.role as any) || 'user',
+      });
+      setLoading(false);
+      } catch {
+        if (cancelled) return;
+        clearAuthStorage();
+        await supabase.auth.signOut({ scope: 'local' });
+        setUser(null);
         setLoading(false);
       }
     };
 
-    checkSession();
+    setFromSession();
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const { data: profile, error: profileError } = await supabase
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (cancelled) return;
+
+      if (!session?.user) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile } = await withTimeout(
+        supabase
           .from('profiles')
           .select('role')
           .eq('id', session.user.id)
-          .single();
+          .maybeSingle(),
+        12000
+      );
 
-        if (profileError) {
-          console.warn("Could not fetch profile role:", profileError.message);
-        }
+      if (cancelled) return;
 
-        const userData: User = {
-          id: session.user.id,
-          email: session.user.email || '',
-          role: (profile?.role as any) || 'user'
-        };
-        setUser(userData);
-        localStorage.setItem('kb_user', JSON.stringify(userData));
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        localStorage.removeItem('kb_user');
-      }
+      setUser({
+        id: session.user.id,
+        email: session.user.email || '',
+        role: (profile?.role as any) || 'user',
+      });
+      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, pass: string) => {
-    const res = await api.login(email, pass);
-    if (res.success && res.user) {
-      // Profile check is handled by the onAuthStateChange listener or manually here
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', res.user.id)
-        .single();
-
-      if (profileError || !profile) {
-        // Sign out if profile is missing or query fails
-        await supabase.auth.signOut();
-        throw new Error('Access denied. No admin profile found.');
-      }
-
-      if (profile.role !== 'admin') {
-        // Log them out immediately if they aren't an admin
-        await supabase.auth.signOut();
-        throw new Error('Access denied. Admin privileges required.');
-      }
-
-      const userData: User = { 
-        id: res.user.id, 
-        email, 
-        role: profile.role as 'admin'
-      };
-      setUser(userData);
-      localStorage.setItem('kb_user', JSON.stringify(userData));
-      return;
-    }
-    throw new Error(res.error || 'Invalid credentials');
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password: pass,
+    });
+    if (error) throw error;
+    if (!data.user) throw new Error('Login failed');
+    await refresh();
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('kb_user');
   };
 
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await withTimeout(supabase.auth.getSession(), 12000);
+      if (error || !data.session?.user) {
+        if (isInvalidRefreshTokenError(error)) {
+          clearAuthStorage();
+          await supabase.auth.signOut({ scope: 'local' });
+        }
+        setUser(null);
+        return;
+      }
 
-  const value = {
+      const { data: profile } = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.session.user.id)
+          .maybeSingle(),
+        12000
+      );
+
+      setUser({
+        id: data.session.user.id,
+        email: data.session.user.email || '',
+        role: (profile?.role as any) || 'user',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const value = useMemo(() => ({
     user,
     loading,
     isAdmin: user?.role === 'admin',
     login,
     signOut,
-  };
+    refresh,
+  }), [user, loading, login, signOut, refresh]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

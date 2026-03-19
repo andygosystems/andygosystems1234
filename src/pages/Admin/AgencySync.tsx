@@ -1,12 +1,32 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Loader2, Globe, Image as ImageIcon, Shield } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 const AgencySync = () => {
   const [urlsText, setUrlsText] = useState('');
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<any[]>([]);
   const [token, setToken] = useState('');
+  const navigate = useNavigate();
+
+  const withTimeout = async <T,>(promise: Promise<T>, ms: number) => {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => setTimeout(() => reject(new Error(`timeout_${ms}ms`)), ms)),
+    ]);
+  };
+
+  const errorMessage = (e: any) => {
+    if (!e) return 'Unknown error';
+    if (typeof e === 'string') return e;
+    if (e.message) return e.message;
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return String(e);
+    }
+  };
 
   const handleScrape = async () => {
     const urls = urlsText.split('\n').map(u => u.trim()).filter(Boolean);
@@ -14,19 +34,15 @@ const AgencySync = () => {
     setLoading(true);
     setItems([]);
     try {
-      const res = await fetch('/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls }),
-      });
-      const json = await res.json();
-      if (json.error) {
-        alert(json.error);
-      } else {
-        setItems(json.items || []);
-      }
-    } catch (e) {
-      alert('Scrape failed: Check your connection.');
+      const { data, error } = await withTimeout(
+        supabase.functions.invoke('scrape-properties', { body: { urls } }),
+        45000
+      );
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setItems(data?.items || []);
+    } catch (e: any) {
+      alert(`Scrape failed: ${errorMessage(e)}`);
     } finally {
       setLoading(false);
     }
@@ -53,7 +69,7 @@ const AgencySync = () => {
         />
         <div className="flex items-center gap-2">
           <input
-            placeholder="JWT Token (from /api/auth.php)"
+            placeholder="(Optional) Token"
             value={token}
             onChange={e => setToken(e.target.value)}
             className="bg-input border border-border p-2 rounded-sm text-sm w-full"
@@ -76,12 +92,15 @@ const AgencySync = () => {
             <div className="flex gap-4">
               <button 
                 onClick={() => {
-                  navigator.clipboard.writeText(JSON.stringify(items, null, 2));
-                  alert('Copied to clipboard! You can now paste this into the "Sync Upload" tool.');
+                  const json = JSON.stringify(items, null, 2);
+                  localStorage.setItem('kb_sync_prefill', json);
+                  navigator.clipboard.writeText(json);
+                  alert('Copied to clipboard! Redirecting to Sync tool...');
+                  navigate('/admin/properties/sync', { state: { prefillJson: json } });
                 }}
                 className="text-xs uppercase font-bold text-primary hover:underline"
               >
-                Copy as JSON
+                Copy as JSON & Sync
               </button>
               <button onClick={() => setItems([])} className="text-xs uppercase font-bold text-muted-foreground hover:text-red-500 transition-colors">Clear Results</button>
             </div>

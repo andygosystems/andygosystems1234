@@ -16,18 +16,14 @@ const AdminLogin = () => {
     setLoading(true);
     setError(null);
 
-    console.log("Initiating login for:", email); // Debug log
-
     try {
       await login(email, password);
-      console.log("Login successful, navigating...");
-      navigate('/admin');
+      navigate('/admin/dashboard', { replace: true });
     } catch (err: any) {
-      console.error("Login error:", err);
+      console.error("Login UI error:", err);
       setError(err.message || "Login failed");
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   return (

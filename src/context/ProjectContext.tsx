@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { api } from '../lib/api';
 
 export interface Project {
@@ -39,10 +39,14 @@ export const useProject = () => {
 export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const inFlight = useRef(false);
 
   const loadData = async () => {
+    if (inFlight.current) return;
+    if (localStorage.getItem('kb_net_busy') === '1') return;
+    inFlight.current = true;
     try {
-      setLoading(true);
+      if (projects.length === 0) setLoading(true);
       const data = await api.getProjects();
       const normalized = (data || []).map((p: any) => ({
         id: String(p.id),
@@ -63,6 +67,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       console.error("Failed to load projects:", e);
     } finally {
       setLoading(false);
+      inFlight.current = false;
     }
   };
 

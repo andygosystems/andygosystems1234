@@ -13,6 +13,8 @@ import ContactPage from './pages/ContactPage';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsConditions from './pages/TermsConditions';
 import FloatingSocials from './components/FloatingSocials';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from './context/AuthContext';
 
 // Admin Imports
 import AdminLayout from './components/AdminLayout';
@@ -28,6 +30,22 @@ import AddProject from './pages/Admin/AddProject';
 import SyncUpload from './pages/Admin/SyncUpload';
 import AgencySync from './pages/Admin/AgencySync';
 import CRM from './pages/Admin/CRM';
+
+function AdminProtected({ children }: { children: React.ReactNode }) {
+  const { user, isAdmin, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/admin/login" replace />;
+  if (!isAdmin) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
 
 function App() {
   return (
@@ -48,81 +66,110 @@ function App() {
             
             {/* Admin Routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
-            
-            <Route path="/admin" element={
-              <AdminLayout>
-                <AdminDashboard />
-              </AdminLayout>
+            {/* Always send bare /admin to the login route so typing /admin works */}
+            <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
+
+            {/* Auth-protected admin dashboard */}
+            <Route path="/admin/dashboard" element={
+              <AdminProtected>
+                <AdminLayout>
+                  <AdminDashboard />
+                </AdminLayout>
+              </AdminProtected>
             } />
             
             <Route path="/admin/properties" element={
-              <AdminLayout>
-                <AdminProperties />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <AdminProperties />
+                </AdminLayout>
+              </AdminProtected>
             } />
             
             <Route path="/admin/properties/sync" element={
-              <AdminLayout>
-                <SyncUpload />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <SyncUpload />
+                </AdminLayout>
+              </AdminProtected>
             } />
             <Route path="/admin/properties/agency-sync" element={
-              <AdminLayout>
-                <AgencySync />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <AgencySync />
+                </AdminLayout>
+              </AdminProtected>
             } />
             <Route path="/admin/crm" element={
-              <AdminLayout>
-                <CRM />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <CRM />
+                </AdminLayout>
+              </AdminProtected>
             } />
             
             <Route path="/admin/properties/add" element={
-              <AdminLayout>
-                <AddProperty />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <AddProperty />
+                </AdminLayout>
+              </AdminProtected>
             } />
             
             <Route path="/admin/properties/edit/:id" element={
-              <AdminLayout>
-                <AddProperty />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <AddProperty />
+                </AdminLayout>
+              </AdminProtected>
             } />
             
             <Route path="/admin/inquiries" element={
-              <AdminLayout>
-                <AdminInquiries />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <AdminInquiries />
+                </AdminLayout>
+              </AdminProtected>
             } />
             
             <Route path="/admin/leads" element={
-              <AdminLayout>
-                <Leads />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <Leads />
+                </AdminLayout>
+              </AdminProtected>
             } />
             
             <Route path="/admin/chats" element={
-              <AdminLayout>
-                <AdminChats />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <AdminChats />
+                </AdminLayout>
+              </AdminProtected>
             } />
 
             <Route path="/admin/projects" element={
-              <AdminLayout>
-                <AdminProjects />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <AdminProjects />
+                </AdminLayout>
+              </AdminProtected>
             } />
             
             <Route path="/admin/projects/add" element={
-              <AdminLayout>
-                <AddProject />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <AddProject />
+                </AdminLayout>
+              </AdminProtected>
             } />
             
             <Route path="/admin/projects/edit/:id" element={
-              <AdminLayout>
-                <AddProject />
-              </AdminLayout>
+              <AdminProtected>
+                <AdminLayout>
+                  <AddProject />
+                </AdminLayout>
+              </AdminProtected>
             } />
 
             {/* Fallback */}

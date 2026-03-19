@@ -44,11 +44,11 @@ const AddProperty = () => {
           location: property.location || '',
           type: property.type || 'Sale',
           status: property.status || 'available',
-          beds: property.beds.toString(),
-          baths: property.baths.toString(),
-          sqft: property.sqft.toString(),
-          lat: property.coords ? property.coords[0].toString() : '',
-          lng: property.coords ? property.coords[1].toString() : '',
+          beds: (property.beds ?? (property as any).bedrooms ?? 0).toString(),
+          baths: (property.baths ?? (property as any).bathrooms ?? 0).toString(),
+          sqft: (property.sqft ?? (property as any).sqm ?? 0).toString(),
+          lat: property.coords ? (property.coords[0] ?? '').toString() : ((property as any).lat ?? '').toString(),
+          lng: property.coords ? (property.coords[1] ?? '').toString() : ((property as any).lng ?? '').toString(),
           amenities: property.amenities ? property.amenities.join(', ') : ''
         });
         setPreviews(property.images);
@@ -99,17 +99,18 @@ const AddProperty = () => {
       const finalImages = [...existingUrls, ...newUploadedUrls];
 
       // 2. Prepare Data
-      // Cast to ExtendedProperty type (ignoring id as it is generated)
       const newProperty: any = {
         title: formData.title,
         description: formData.description,
-        price: formData.price, // Keep as string or convert if needed. The Property type says string.
+        price: parseFloat(formData.price) || 0,
+        currency: formData.currency || 'KES',
         location: formData.location,
         type: formData.type as 'Sale' | 'Rent',
-        beds: parseInt(formData.beds) || 0,
-        baths: parseInt(formData.baths) || 0,
-        sqft: parseInt(formData.sqft) || 0,
-        coords: [parseFloat(formData.lat) || 0, parseFloat(formData.lng) || 0],
+        bedrooms: parseInt(formData.beds) || 0,
+        bathrooms: parseInt(formData.baths) || 0,
+        sqm: parseInt(formData.sqft) || 0,
+        lat: parseFloat(formData.lat) || null,
+        lng: parseFloat(formData.lng) || null,
         images: finalImages,
         amenities: formData.amenities.split(',').map(s => s.trim()).filter(Boolean),
         status: formData.status as 'available' | 'sold' | 'rented'
@@ -324,7 +325,7 @@ const AddProperty = () => {
             className="w-full bg-primary text-primary-foreground font-bold py-4 uppercase tracking-wide hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 btn-shine"
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {loading ? 'Adding Property...' : 'Add Property'}
+            {loading ? (isEditMode ? 'Updating Property...' : 'Adding Property...') : (isEditMode ? 'Update Property' : 'Add Property')}
           </button>
         </div>
       </form>

@@ -1,55 +1,78 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Upload, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import { api } from '../../lib/api';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 const SyncUpload = () => {
   const [jsonText, setJsonText] = useState('');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<{ title: string; status: 'ok' | 'error'; details?: string }[]>([]);
+  const location = useLocation();
+
+  useEffect(() => {
+    const stateJson = (location.state as any)?.prefillJson;
+    if (typeof stateJson === 'string' && stateJson.trim()) {
+      setJsonText(stateJson);
+      return;
+    }
+    const saved = localStorage.getItem('kb_sync_prefill');
+    if (saved && saved.trim()) {
+      setJsonText(saved);
+      localStorage.removeItem('kb_sync_prefill');
+    }
+  }, [location.state]);
 
   const handleImport = async () => {
+    if (!jsonText.trim()) return;
     setLoading(true);
     setResults([]);
+    
     try {
+      localStorage.setItem('kb_net_busy', '1');
       const data = JSON.parse(jsonText);
       if (!Array.isArray(data)) throw new Error('JSON must be an array of property objects');
-      const resList: { title: string; status: 'ok' | 'error'; details?: string }[] = [];
-      for (const item of data) {
-        const payload = {
-          title: item.title,
-          description: item.description,
-          price: item.price,
+      
+      const payloads = data.map((item: any) => {
+        let status = (item.status || 'available').toLowerCase();
+        if (!['available', 'sold', 'rented'].includes(status)) status = 'available';
+
+        return {
+          title: item.title || 'Untitled Property',
+          description: item.description || '',
+          price: parseFloat(item.price) || 0,
           currency: item.currency || 'KES',
-          location: item.location,
-          county: item.county || '',
-          subcounty: item.subcounty || '',
-          estate: item.estate || '',
+          location: item.location || 'Unknown Location',
           type: item.type === 'Rent' ? 'Rent' : 'Sale',
-          status: item.status || 'available',
-          bedrooms: item.bedrooms ?? item.beds ?? 0,
-          bathrooms: item.bathrooms ?? item.baths ?? 0,
-          sqm: item.sqm ?? item.sqft ?? 0,
-          lat: item.lat ?? null,
-          lng: item.lng ?? null,
+          status,
+          bedrooms: parseInt(item.bedrooms || item.beds) || 0,
+          bathrooms: parseInt(item.bathrooms || item.baths) || 0,
+          sqm: parseInt(item.sqm || item.sqft) || 0,
+          lat: parseFloat(item.lat) || null,
+          lng: parseFloat(item.lng) || null,
           property_type: item.property_type || item.category || null,
-          virtual_tour_url: item.virtual_tour_url || null,
           images: Array.isArray(item.images) ? item.images : [],
-          amenities: Array.isArray(item.amenities) ? item.amenities : (typeof item.amenities === 'string' ? item.amenities.split(',').map((s:string) => s.trim()).filter(Boolean) : []),
+          amenities: Array.isArray(item.amenities)
+            ? item.amenities
+            : (typeof item.amenities === 'string'
+              ? item.amenities.split(',').map((s: string) => s.trim()).filter(Boolean)
+              : (Array.isArray(item.keywords) ? item.keywords : []))
         };
-        const res = await api.addProperty(payload);
-        if ((res as any).id) {
-          resList.push({ title: payload.title, status: 'ok' });
-        } else {
-          resList.push({ title: payload.title, status: 'error', details: JSON.stringify(res) });
-        }
-      }
-      setResults(resList);
-      alert('Sync completed');
+      });
+
+      const bulkResults = await api.bulkAddProperties(payloads);
+      setResults(bulkResults);
+
+      const ok = bulkResults.filter(r => r.status === 'ok').length;
+      if (ok === payloads.length) alert(`Successfully imported all ${ok} properties!`);
+      else if (ok > 0) alert(`Imported ${ok} properties. Some items failed (check results below).`);
+      else alert('Import failed. Please check the results below for details.');
+
     } catch (e:any) {
-      alert(`Invalid JSON: ${e.message}`);
+      console.error("JSON Parse Error:", e);
+      alert(`Import failed: ${e.message}`);
     } finally {
       setLoading(false);
+      localStorage.removeItem('kb_net_busy');
     }
   };
 

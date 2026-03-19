@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -19,35 +19,13 @@ interface AdminLayoutProps {
 }
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {
-  const { user, isAdmin, loading, signOut } = useAuth();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        navigate('/admin/login');
-      } else if (!isAdmin) {
-        // Optional: Redirect non-admins or show access denied
-        // For now, redirect to home
-        navigate('/');
-      }
-    }
-  }, [user, isAdmin, loading, navigate]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
-  if (!isAdmin) return null;
-
   const navItems = [
-    { path: '/admin', icon: LayoutDashboard, label: 'Overview' },
+    { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Overview' },
     { path: '/admin/properties', icon: Building2, label: 'All Properties' },
     { path: '/admin/projects', icon: Hammer, label: 'New Projects' },
     { path: '/admin/properties/add', icon: PlusCircle, label: 'Add Property' },

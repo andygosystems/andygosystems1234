@@ -5,6 +5,48 @@ export const isJson = (res: Response) => {
   return contentType && contentType.includes('application/json');
 };
 
+const errorMessage = (e: any) => {
+  if (!e) return 'Unknown error';
+  if (typeof e === 'string') return e;
+  if (e.message) return e.message;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+};
+
+const isTransientNetworkError = (e: any) => {
+  const msg = (e?.message || '').toLowerCase();
+  if (msg.includes('aborterror')) return true;
+  if (msg.includes('network timeout')) return true;
+  if (msg.includes('failed to fetch')) return true;
+  if (msg.includes('networkerror')) return true;
+  const status = typeof e?.status === 'number' ? e.status : undefined;
+  if (status && status >= 500) return true;
+  return false;
+};
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const withRetry = async (fn: () => Promise<any>, opts?: { retries?: number }): Promise<any> => {
+  const retries = opts?.retries ?? 3;
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      attempt += 1;
+      if (attempt > retries || !isTransientNetworkError(e)) throw e;
+      const base = 400 * Math.pow(2, attempt - 1);
+      const jitter = Math.floor(Math.random() * 200);
+      await sleep(base + jitter);
+    }
+  }
+};
+
+const asPromise = (value: any): Promise<any> => Promise.resolve(value as any);
+
 export const api = {
   // --- AUTH ---
   login: async (email: string, pass: string) => {
@@ -29,7 +71,7 @@ export const api = {
           *,
           property_images (url, is_primary),
           property_amenities (name)
-        `)
+        `, { count: 'exact' })
         .order('created_at', { ascending: false });
 
       // Apply Filters
@@ -50,7 +92,10 @@ export const api = {
       if (filters.proximity_near_main_road === 'true') query = query.eq('proximity_near_main_road', true);
 
       const { data, error, count } = await query;
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase Query Error:", error);
+        throw error;
+      }
 
       // Map to frontend structure
       const mapped = (data || []).map(p => ({
@@ -69,44 +114,39 @@ export const api = {
 
   addProperty: async (p: any) => {
     try {
-      const { data: prop, error: propErr } = await supabase
-        .from('properties')
-        .insert([{
-          title: p.title,
-          description: p.description,
-          price: p.price,
-          currency: p.currency || 'KES',
-          location: p.location,
-          type: p.type,
-          status: p.status || 'available',
-          bedrooms: p.bedrooms || 0,
-          bathrooms: p.bathrooms || 0,
-          sqm: p.sqm || 0,
-          lat: p.lat,
-          lng: p.lng,
-          property_type: p.property_type,
-          virtual_tour_url: p.virtual_tour_url,
-          land_category: p.land_category,
-          tenure_type: p.tenure_type,
-          plot_size: p.plot_size,
-          doc_ready_title: !!p.doc_ready_title,
-          doc_allotment_letter: !!p.doc_allotment_letter,
-          doc_search_conducted: !!p.doc_search_conducted,
-          invest_fenced: !!p.invest_fenced,
-          invest_beacons: !!p.invest_beacons,
-          invest_borehole: !!p.invest_borehole,
-          invest_electricity: !!p.invest_electricity,
-          proximity_near_main_road: !!p.proximity_near_main_road,
-          proximity_distance_cbd: p.proximity_distance_cbd,
-          proximity_future_infra: !!p.proximity_future_infra,
-          topography: p.topography,
-          payment_plan: p.payment_plan,
-          verified_listing: !!p.verified_listing
-        }])
-        .select()
-        .single();
+      console.log("[DEBUG] addProperty payload:", p);
+      
+      const { data: prop, error: propErr } = await withRetry(() =>
+        asPromise(
+          supabase
+            .from('properties')
+            .insert([{
+              title: p.title || 'Untitled Property',
+              description: p.description || '',
+              price: parseFloat(p.price) || 0,
+              currency: p.currency || 'KES',
+              location: p.location || '',
+              type: p.type || 'Sale',
+              status: p.status || 'available',
+              bedrooms: parseInt(p.bedrooms || p.beds) || 0,
+              bathrooms: parseInt(p.bathrooms || p.baths) || 0,
+              sqm: parseInt(p.sqm || p.sqft) || 0,
+              lat: parseFloat(p.lat) || null,
+              lng: parseFloat(p.lng) || null,
+              property_type: p.property_type || null,
+              virtual_tour_url: p.virtual_tour_url || null
+            }])
+            .select('id')
+            .single()
+        )
+      );
 
-      if (propErr) throw propErr;
+      if (propErr) {
+        console.error("[DEBUG] Supabase Properties Insert Error:", propErr);
+        throw propErr;
+      }
+
+      console.log("[DEBUG] Property created, id:", prop.id);
 
       // Add Images
       if (Array.isArray(p.images) && p.images.length > 0) {
@@ -115,7 +155,8 @@ export const api = {
           url,
           is_primary: i === 0
         }));
-        await supabase.from('property_images').insert(imgs);
+        const { error: imgErr } = await withRetry(() => asPromise(supabase.from('property_images').insert(imgs)));
+        if (imgErr) console.error("[DEBUG] Image Insert Error:", imgErr);
       }
 
       // Add Amenities
@@ -124,33 +165,116 @@ export const api = {
           property_id: prop.id,
           name
         }));
-        await supabase.from('property_amenities').insert(ams);
+        const { error: amErr } = await withRetry(() => asPromise(supabase.from('property_amenities').insert(ams)));
+        if (amErr) console.error("[DEBUG] Amenities Insert Error:", amErr);
       }
 
       return { id: prop.id, message: 'Created' };
     } catch (e: any) {
+      console.error("[DEBUG] addProperty caught error:", e);
       throw e;
     }
+  },
+
+  bulkAddProperties: async (items: any[]) => {
+    const results: { title: string; status: 'ok' | 'error'; id?: string; details?: string }[] = [];
+    const chunkSize = 5;
+
+    for (let i = 0; i < items.length; i += chunkSize) {
+      const chunk = items.slice(i, i + chunkSize);
+
+      try {
+        const rows = chunk.map(p => ({
+          title: p.title || 'Untitled Property',
+          description: p.description || '',
+          price: parseFloat(p.price) || 0,
+          currency: p.currency || 'KES',
+          location: p.location || '',
+          type: p.type || 'Sale',
+          status: p.status || 'available',
+          bedrooms: parseInt(p.bedrooms || p.beds) || 0,
+          bathrooms: parseInt(p.bathrooms || p.baths) || 0,
+          sqm: parseInt(p.sqm || p.sqft) || 0,
+          lat: parseFloat(p.lat) || null,
+          lng: parseFloat(p.lng) || null,
+          property_type: p.property_type || null,
+          virtual_tour_url: p.virtual_tour_url || null
+        }));
+
+        const { data: inserted, error: insertErr } = await withRetry(() =>
+          asPromise(
+            supabase
+              .from('properties')
+              .insert(rows)
+              .select('id,title')
+          )
+        );
+
+        if (insertErr) throw insertErr;
+        const insertedRows = inserted || [];
+
+        const imageRows: any[] = [];
+        const amenityRows: any[] = [];
+
+        for (let j = 0; j < insertedRows.length; j++) {
+          const ins = insertedRows[j] as any;
+          const original = chunk[j] || {};
+
+          const imgs = Array.isArray(original.images) ? original.images : [];
+          for (let k = 0; k < imgs.length; k++) {
+            imageRows.push({ property_id: ins.id, url: imgs[k], is_primary: k === 0 });
+          }
+
+          const ams = Array.isArray(original.amenities)
+            ? original.amenities
+            : (Array.isArray(original.keywords) ? original.keywords : []);
+          for (const name of ams) {
+            amenityRows.push({ property_id: ins.id, name });
+          }
+
+          results.push({ title: ins.title || original.title || 'Untitled Property', status: 'ok', id: ins.id });
+        }
+
+        if (imageRows.length > 0) {
+          const { error: imgErr } = await withRetry(() => asPromise(supabase.from('property_images').insert(imageRows)));
+          if (imgErr) console.error("Supabase bulk image insert error:", errorMessage(imgErr));
+        }
+
+        if (amenityRows.length > 0) {
+          const { error: amErr } = await withRetry(() => asPromise(supabase.from('property_amenities').insert(amenityRows)));
+          if (amErr) console.error("Supabase bulk amenities insert error:", errorMessage(amErr));
+        }
+      } catch (e: any) {
+        const msg = errorMessage(e);
+        for (const p of chunk) {
+          results.push({ title: p.title || 'Untitled Property', status: 'error', details: msg });
+        }
+      }
+    }
+
+    return results;
   },
 
   updateProperty: async (id: string | number, p: any) => {
     try {
       const idStr = String(id);
-      const { error: propErr } = await supabase
-        .from('properties')
-        .update({
+      const { error: propErr } = await withRetry(() =>
+        asPromise(
+          supabase
+            .from('properties')
+            .update({
           title: p.title,
           description: p.description,
-          price: p.price,
-          currency: p.currency,
+          price: typeof p.price === 'string' ? (parseFloat(p.price) || 0) : (p.price ?? 0),
+          currency: p.currency || 'KES',
           location: p.location,
           type: p.type,
           status: p.status,
-          bedrooms: p.bedrooms,
-          bathrooms: p.bathrooms,
-          sqm: p.sqm,
-          lat: p.lat,
-          lng: p.lng,
+          bedrooms: typeof p.bedrooms === 'string' ? (parseInt(p.bedrooms) || 0) : (p.bedrooms ?? 0),
+          bathrooms: typeof p.bathrooms === 'string' ? (parseInt(p.bathrooms) || 0) : (p.bathrooms ?? 0),
+          sqm: typeof p.sqm === 'string' ? (parseInt(p.sqm) || 0) : (p.sqm ?? 0),
+          lat: p.lat === '' || p.lat === undefined ? null : (typeof p.lat === 'string' ? (parseFloat(p.lat) || null) : p.lat),
+          lng: p.lng === '' || p.lng === undefined ? null : (typeof p.lng === 'string' ? (parseFloat(p.lng) || null) : p.lng),
           property_type: p.property_type,
           virtual_tour_url: p.virtual_tour_url,
           land_category: p.land_category,
@@ -170,30 +294,40 @@ export const api = {
           payment_plan: p.payment_plan,
           verified_listing: !!p.verified_listing,
           updated_at: new Date().toISOString()
-        })
-        .eq('id', idStr);
+            })
+            .eq('id', idStr)
+        )
+      );
 
       if (propErr) throw propErr;
 
       // Refresh Images
       if (Array.isArray(p.images)) {
-        await supabase.from('property_images').delete().eq('property_id', idStr);
+        const { error: delErr } = await withRetry(() => asPromise(supabase.from('property_images').delete().eq('property_id', idStr)));
+        if (delErr) throw delErr;
         const imgs = p.images.map((url: string, i: number) => ({
           property_id: idStr,
           url,
           is_primary: i === 0
         }));
-        await supabase.from('property_images').insert(imgs);
+        if (imgs.length > 0) {
+          const { error: insErr } = await withRetry(() => asPromise(supabase.from('property_images').insert(imgs)));
+          if (insErr) throw insErr;
+        }
       }
 
       // Refresh Amenities
       if (Array.isArray(p.amenities)) {
-        await supabase.from('property_amenities').delete().eq('property_id', idStr);
+        const { error: delErr } = await withRetry(() => asPromise(supabase.from('property_amenities').delete().eq('property_id', idStr)));
+        if (delErr) throw delErr;
         const ams = p.amenities.map((name: string) => ({
           property_id: idStr,
           name
         }));
-        await supabase.from('property_amenities').insert(ams);
+        if (ams.length > 0) {
+          const { error: insErr } = await withRetry(() => asPromise(supabase.from('property_amenities').insert(ams)));
+          if (insErr) throw insErr;
+        }
       }
 
       return { message: 'Updated' };
@@ -246,7 +380,7 @@ export const api = {
       if (error) throw error;
       return data || [];
     } catch (e: any) {
-      console.error("Supabase getProjects Error:", e);
+      console.error("Supabase getProjects Error:", errorMessage(e));
       return [];
     }
   },
@@ -323,7 +457,7 @@ export const api = {
       if (error) throw error;
       return data;
     } catch (e: any) {
-      console.error("Supabase getInquiries Error:", e);
+      console.error("Supabase getInquiries Error:", errorMessage(e));
       return [];
     }
   },
@@ -426,7 +560,7 @@ export const api = {
         range: { from, to }
       };
     } catch (e: any) {
-      console.error("Supabase getCRMStats Error:", e);
+      console.error("Supabase getCRMStats Error:", errorMessage(e));
       throw e;
     }
   },
@@ -454,7 +588,7 @@ export const api = {
         }))
       }));
     } catch (e: any) {
-      console.error("Supabase getChats Error:", e);
+      console.error("Supabase getChats Error:", errorMessage(e));
       return [];
     }
   },
@@ -481,11 +615,18 @@ export const api = {
   // --- SCRAPER ---
   scrape: async (urls: string[]) => {
     try {
-      // Scraper still needs a server to run (CORS prevents browser scraping)
-      // We'll call the Node.js server for this specific utility
-      const res = await fetch('/api/scrape', {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const functionUrl = supabaseUrl 
+        ? `${supabaseUrl}/functions/v1/scrape-properties`
+        : 'https://iuyasnhjevxzidpsolfz.functions.supabase.co/scrape-properties';
+
+      const res = await fetch(functionUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        },
         body: JSON.stringify({ urls }),
       });
       return await res.json();

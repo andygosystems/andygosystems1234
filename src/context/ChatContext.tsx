@@ -38,6 +38,7 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [allSessions, setAllSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const inFlight = React.useRef(false);
   const [mySessionIds, setMySessionIds] = useState<string[]>(() => {
     try {
         return JSON.parse(localStorage.getItem('krugerr_my_sessions') || '[]');
@@ -49,6 +50,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const sessions = allSessions.filter(s => mySessionIds.includes(s.id));
 
   const loadChats = async () => {
+    if (inFlight.current) return;
+    if (localStorage.getItem('kb_net_busy') === '1') return;
+    inFlight.current = true;
     try {
       const data = await api.getChats();
       const mapped = data.map((s: any) => ({
@@ -64,6 +68,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAllSessions(mapped);
     } catch (e) {
       console.error("Failed to load chats", e);
+    } finally {
+      inFlight.current = false;
     }
   };
 
