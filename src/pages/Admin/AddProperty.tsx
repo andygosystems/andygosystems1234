@@ -13,6 +13,7 @@ const AddProperty = () => {
   const [uploading, setUploading] = useState(false);
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   
   const isEditMode = !!id;
 
@@ -79,21 +80,34 @@ const AddProperty = () => {
     e.preventDefault();
     setLoading(true);
 
+    setStatus(null);
     try {
       // 1. Upload Images
       const existingUrls = previews.filter(url => !url.startsWith('blob:'));
       const newUploadedUrls: string[] = [];
+      const failedUploads: string[] = [];
 
-      // Upload new files
+      // Upload new files — abort on failure, never store blob URLs
       for (const file of images) {
         try {
-           const { url } = await api.uploadImage(file);
-           if (url) newUploadedUrls.push(url);
-        } catch (uploadError) {
-           console.error("Failed to upload image:", uploadError);
-           // Fallback to blob if upload fails (local only)
-           newUploadedUrls.push(URL.createObjectURL(file));
+          setUploading(true);
+          const { url } = await api.uploadImage(file);
+          if (url) newUploadedUrls.push(url);
+        } catch (uploadError: any) {
+          const reason = uploadError?.message || 'unknown error';
+          failedUploads.push(`${file.name}: ${reason}`);
+        } finally {
+          setUploading(false);
         }
+      }
+
+      if (failedUploads.length > 0) {
+        setStatus({
+          type: 'error',
+          message: `Image upload failed for: ${failedUploads.join('; ')}. Check Supabase Storage bucket permissions and ensure the "property-images" bucket exists.`
+        });
+        setLoading(false);
+        return;
       }
 
       const finalImages = [...existingUrls, ...newUploadedUrls];
@@ -119,16 +133,17 @@ const AddProperty = () => {
       // 3. Add or Update Context
       if (isEditMode && id) {
         await updateProperty(id, newProperty);
-        alert('Property updated successfully!');
+        setStatus({ type: 'success', message: 'Property updated successfully!' });
       } else {
         await addProperty(newProperty);
-        alert('Property added successfully!');
+        setStatus({ type: 'success', message: 'Property added successfully!' });
       }
-      
-      navigate('/admin/properties');
+
+      setTimeout(() => navigate('/admin/properties'), 1200);
     } catch (error: any) {
       console.error('Error saving property:', error);
-      alert('Failed to save property');
+      const msg = error?.message || error?.error_description || JSON.stringify(error);
+      setStatus({ type: 'error', message: `Failed to save property: ${msg}` });
     } finally {
       setLoading(false);
     }
@@ -139,6 +154,17 @@ const AddProperty = () => {
       <h1 className="text-2xl font-serif font-bold text-foreground mb-8">
         {isEditMode ? 'Edit Property' : 'Add New Property'}
       </h1>
+
+      {status && (
+        <div className={`mb-6 p-4 rounded-sm border text-sm font-medium flex items-start justify-between gap-4 ${
+          status.type === 'success'
+            ? 'bg-green-500/10 border-green-500/30 text-green-600'
+            : 'bg-destructive/10 border-destructive/30 text-destructive'
+        }`}>
+          <span>{status.message}</span>
+          <button type="button" onClick={() => setStatus(null)} className="shrink-0 font-bold opacity-60 hover:opacity-100">&times;</button>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="bg-card p-8 rounded-sm shadow-sm border border-border space-y-6">
         {/* Basic Info */}

@@ -79,32 +79,20 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const addProject = async (project: Omit<Project, 'id' | 'createdAt'>) => {
-    try {
-      await api.addProject(project);
-      await loadData();
-    } catch (e) {
-      console.error("Failed to add project", e);
-    }
+    await api.addProject(project);
+    await loadData();
   };
 
   const updateProject = async (id: string, updates: Partial<Project>) => {
-    try {
-      const current = projects.find(p => p.id === id);
-      if (!current) return;
-      await api.updateProject(id, { ...current, ...updates });
-      await loadData();
-    } catch (e) {
-      console.error("Failed to update project", e);
-    }
+    const current = projects.find(p => p.id === id);
+    if (!current) throw new Error('Project not found');
+    await api.updateProject(id, { ...current, ...updates });
+    await loadData();
   };
 
   const deleteProject = async (id: string) => {
-    try {
-      await api.deleteProject(id);
-      await loadData();
-    } catch (e) {
-      console.error("Failed to delete project", e);
-    }
+    await api.deleteProject(id);
+    await loadData();
   };
 
   const getProjectById = (id: string) => {

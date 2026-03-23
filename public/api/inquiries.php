@@ -101,7 +101,7 @@ if ($method === 'POST') {
             <p><strong>Email:</strong> {$data['email']}</p>
             <p><strong>Message:</strong><br>{$data['message']}</p>
             <hr>
-            <p><strong>System Note:</strong> Notification logic for +254 733 323 273 executed.</p>
+            <p><strong>System Note:</strong> Notification sent to +254 782 180777 and +254 722 707248.</p>
         ";
 
         // Send to Admin
@@ -118,40 +118,38 @@ if ($method === 'POST') {
         $wa_token       = 'YOUR_TOKEN';       // e.g., abc123xyz
         
         if ($wa_instance_id !== 'YOUR_INSTANCE_ID') {
-            $admin_phone = "254733323273"; // The admin's WhatsApp number
+            $admin_phones = ["254782180777", "254722707248"]; // +254 782 180777 and +254 722 707248
             $wa_message = "🔔 *New Lead Received*\n\n" . 
                           "👤 *Name:* " . $data['customer_name'] . "\n" .
                           "📧 *Email:* " . $data['email'] . "\n" .
                           "💬 *Msg:* " . substr($data['message'], 0, 100) . "...";
-            
-            $curl = curl_init();
-            $params = [
-                'token' => $wa_token,
-                'to' => $admin_phone,
-                'body' => $wa_message
-            ];
-            
-            // Example using UltraMsg API structure
-            curl_setopt_array($curl, array(
-              CURLOPT_URL => "https://api.ultramsg.com/$wa_instance_id/messages/chat",
-              CURLOPT_RETURNTRANSFER => true,
-              CURLOPT_ENCODING => "",
-              CURLOPT_MAXREDIRS => 10,
-              CURLOPT_TIMEOUT => 30,
-              CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-              CURLOPT_CUSTOMREQUEST => "POST",
-              CURLOPT_POSTFIELDS => http_build_query($params),
-              CURLOPT_HTTPHEADER => array(
-                "content-type: application/x-www-form-urlencoded"
-              ),
-            ));
-            
-            $response = curl_exec($curl);
-            $err = curl_error($curl);
-            curl_close($curl);
-            
-            if ($err) {
-                error_log("WhatsApp Error: " . $err);
+
+            foreach ($admin_phones as $admin_phone) {
+                $curl = curl_init();
+                $params = [
+                    'token' => $wa_token,
+                    'to'    => $admin_phone,
+                    'body'  => $wa_message
+                ];
+                curl_setopt_array($curl, array(
+                  CURLOPT_URL => "https://api.ultramsg.com/$wa_instance_id/messages/chat",
+                  CURLOPT_RETURNTRANSFER => true,
+                  CURLOPT_ENCODING => "",
+                  CURLOPT_MAXREDIRS => 10,
+                  CURLOPT_TIMEOUT => 30,
+                  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                  CURLOPT_CUSTOMREQUEST => "POST",
+                  CURLOPT_POSTFIELDS => http_build_query($params),
+                  CURLOPT_HTTPHEADER => array(
+                    "content-type: application/x-www-form-urlencoded"
+                  ),
+                ));
+                $response = curl_exec($curl);
+                $err = curl_error($curl);
+                curl_close($curl);
+                if ($err) {
+                    error_log("WhatsApp Error ($admin_phone): " . $err);
+                }
             }
         }
 

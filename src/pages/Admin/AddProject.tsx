@@ -2,16 +2,20 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Upload, X, Loader2, Calendar, FileText } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
+import { api } from '../../lib/api';
+import { supabase } from '../../lib/supabase';
 
 const AddProject = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { addProject, updateProject, getProjectById } = useProject();
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [brochure, setBrochure] = useState<File | null>(null);
   const [brochureName, setBrochureName] = useState<string>('');
+  const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   
   const isEditMode = !!id;
 
@@ -83,15 +87,9 @@ const AddProject = () => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
       setImages(prev => [...prev, ...newFiles]);
-      
-      // Convert to Base64 for persistence
-      newFiles.forEach(file => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-              setPreviews(prev => [...prev, reader.result as string]);
-          };
-          reader.readAsDataURL(file);
-      });
+      // Blob URLs for local preview only — actual upload happens on submit
+      const blobUrls = newFiles.map(f => URL.createObjectURL(f));
+      setPreviews(prev => [...prev, ...blobUrls]);
     }
   };
 
@@ -104,27 +102,63 @@ const AddProject = () => {
   };
 
   const removeImage = (index: number) => {
-    setImages(prev => prev.filter((_, i) => i !== index));
+    const url = previews[index];
+    if (url?.startsWith('blob:')) {
+      // Find which position this blob is among blob-only previews, then drop that File
+      const blobIndex = previews.slice(0, index + 1).filter(u => u.startsWith('blob:')).length - 1;
+      setImages(prev => prev.filter((_, i) => i !== blobIndex));
+      URL.revokeObjectURL(url);
+    }
     setPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setStatus(null);
 
     try {
-      // Simulate Brochure Upload (convert to Base64 if small, else just use name)
-      let brochureUrl: string | undefined = undefined;
-      if (isEditMode) {
-        brochureUrl = getProjectById(id!)?.brochureUrl;
+      // --- Upload new images to Supabase Storage ---
+      const existingUrls = previews.filter(u => !u.startsWith('blob:'));
+      const uploadedUrls: string[] = [];
+      const failedUploads: string[] = [];
+
+      if (images.length > 0) {
+        setUploading(true);
+        for (const file of images) {
+          try {
+            const { url } = await api.uploadImage(file);
+            uploadedUrls.push(url);
+          } catch (uploadErr: any) {
+            failedUploads.push(`${file.name}: ${uploadErr?.message || 'upload failed'}`);
+          }
+        }
+        setUploading(false);
       }
-      
+
+      if (failedUploads.length > 0) {
+        setStatus({ type: 'error', message: `Image upload failed: ${failedUploads.join('; ')}` });
+        setLoading(false);
+        return;
+      }
+
+      // --- Upload brochure PDF to Supabase Storage ---
+      let brochureUrl: string | undefined = isEditMode ? getProjectById(id!)?.brochureUrl : undefined;
       if (brochure) {
-          // Simple fake URL or Base64 if needed. For now, we'll use a fake path since we can't upload.
-          // In a real app, this would be an API call.
-          // Let's try to do Base64 for the brochure too, but it might be heavy.
-          // We'll just store the name for now to indicate it exists.
-          brochureUrl = `/brochures/${brochure.name}`;
+        try {
+          const ext = brochure.name.split('.').pop()?.toLowerCase() || 'pdf';
+          const fileName = `brochures/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+          const { error: brochureErr } = await supabase.storage
+            .from('property-images')
+            .upload(fileName, brochure, { cacheControl: '3600', upsert: false });
+          if (brochureErr) throw new Error(brochureErr.message);
+          const { data: { publicUrl } } = supabase.storage.from('property-images').getPublicUrl(fileName);
+          brochureUrl = publicUrl;
+        } catch (brochureUploadErr: any) {
+          setStatus({ type: 'error', message: `Brochure upload failed: ${brochureUploadErr?.message}` });
+          setLoading(false);
+          return;
+        }
       }
 
       const projectData = {
@@ -136,29 +170,41 @@ const AddProject = () => {
         progress: Number(formData.progress),
         autoProgress: formData.autoProgress,
         status: formData.status as any,
-        images: previews,
+        images: [...existingUrls, ...uploadedUrls],
         brochureUrl
       };
 
       if (isEditMode && id) {
         await updateProject(id, projectData);
-        alert('Project updated successfully');
+        setStatus({ type: 'success', message: 'Project updated successfully!' });
       } else {
         await addProject(projectData);
-        alert('Project added successfully');
+        setStatus({ type: 'success', message: 'Project added successfully!' });
       }
 
-      navigate('/admin/projects');
-    } catch (error) {
+      setTimeout(() => navigate('/admin/projects'), 1200);
+    } catch (error: any) {
       console.error('Error saving project:', error);
-      alert('Failed to save project');
+      const msg = error?.message || error?.error_description || JSON.stringify(error);
+      setStatus({ type: 'error', message: `Failed to save project: ${msg}` });
     } finally {
       setLoading(false);
+      setUploading(false);
     }
   };
 
   return (
     <div>
+      {status && (
+        <div className={`mb-6 p-4 rounded-sm border text-sm font-medium flex items-start justify-between gap-4 ${
+          status.type === 'success'
+            ? 'bg-green-500/10 border-green-500/30 text-green-600'
+            : 'bg-destructive/10 border-destructive/30 text-destructive'
+        }`}>
+          <span>{status.message}</span>
+          <button type="button" onClick={() => setStatus(null)} className="shrink-0 font-bold opacity-60 hover:opacity-100">&times;</button>
+        </div>
+      )}
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-serif font-bold text-foreground">
           {isEditMode ? 'Edit Project' : 'Add New Project'}
@@ -358,8 +404,8 @@ const AddProject = () => {
             disabled={loading}
             className="w-full bg-primary text-primary-foreground font-bold py-4 uppercase tracking-wide hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 btn-shine"
           >
-            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {loading ? 'Saving Project...' : 'Save Project'}
+            {(loading || uploading) && <Loader2 className="w-4 h-4 animate-spin" />}
+            {uploading ? 'Uploading Images...' : loading ? 'Saving Project...' : 'Save Project'}
           </button>
         </div>
       </form>

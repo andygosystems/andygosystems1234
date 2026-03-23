@@ -71,24 +71,24 @@ const AIAssistant = () => {
     }
   };
 
-  // Agent's WhatsApp number
-  const WHATSAPP_NUMBER = "254757700391";
+  // Agent's WhatsApp numbers
+  const WHATSAPP_NUMBER = "254782180777"; // Primary: +254 782 180777
+  const WHATSAPP_NUMBER_2 = "254722707248"; // Secondary: +254 722 707248
 
-  // Control visibility delay
+  // Control visibility — only auto-open if not already open; never close an active conversation
   useEffect(() => {
-    // Hide immediately on navigation
-    setIsOpen(false);
+    // If on contact page or admin, do not auto-open
+    if (location.pathname === '/contact' || location.pathname.startsWith('/admin')) return;
 
-    // If on contact page, do not open
-    if (location.pathname === '/contact') return;
+    // Only auto-open if currently closed (don't interrupt an active chat)
+    if (isOpen) return;
 
-    // Set timer to open after 15 seconds
     const timer = setTimeout(() => {
       setIsOpen(true);
-    }, 15000); // 15 seconds
+    }, 15000);
 
     return () => clearTimeout(timer);
-  }, [location.pathname]);
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -99,13 +99,9 @@ const AIAssistant = () => {
   }, [messages, isOpen]);
 
   const notifyAgent = (msg: string) => {
-    // Construct the WhatsApp URL
-    // We append the message to the text query parameter
     const text = encodeURIComponent(`*New Website Inquiry*\n\nUser Message: ${msg}`);
-    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${text}`;
-    
-    // Open in a new tab
-    window.open(url, '_blank');
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${text}`, '_blank');
+    window.open(`https://wa.me/${WHATSAPP_NUMBER_2}?text=${text}`, '_blank');
   };
 
   const handleSend = async (e?: React.FormEvent) => {
@@ -168,7 +164,7 @@ const AIAssistant = () => {
       }
       // 3. Contact / Human Handoff
       else if (lowerMsg.includes("contact") || lowerMsg.includes("agent") || lowerMsg.includes("call") || lowerMsg.includes("whatsapp") || lowerMsg.includes("talk") || lowerMsg.includes("human")) {
-        responseText = "I can connect you directly to our senior agent on WhatsApp for immediate assistance. Click the button below to start the chat.";
+        responseText = "I can connect you directly to our agents on WhatsApp for immediate assistance. You can reach us on **+254 782 180777** or **+254 722 707248**. Click the button below to start the chat.";
         isAction = true;
       } 
       // 4. Greeting

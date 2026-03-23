@@ -1,17 +1,19 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useProject } from '../../context/ProjectContext';
 import { Plus, Trash2, Edit, Calendar, FileText } from 'lucide-react';
 
 const AdminProjects = () => {
   const { projects, deleteProject, loading } = useProject();
+  const [deleteStatus, setDeleteStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this project?')) {
       try {
         await deleteProject(id);
-        alert('Project deleted successfully');
-      } catch (e) {
-        alert('Failed to delete project');
+        setDeleteStatus({ type: 'success', message: 'Project deleted successfully.' });
+      } catch (e: any) {
+        setDeleteStatus({ type: 'error', message: `Failed to delete project: ${e?.message || e}` });
       }
     }
   };
@@ -26,6 +28,16 @@ const AdminProjects = () => {
 
   return (
     <div>
+      {deleteStatus && (
+        <div className={`mb-4 p-4 rounded-sm border text-sm font-medium flex items-start justify-between gap-4 ${
+          deleteStatus.type === 'success'
+            ? 'bg-green-500/10 border-green-500/30 text-green-600'
+            : 'bg-destructive/10 border-destructive/30 text-destructive'
+        }`}>
+          <span>{deleteStatus.message}</span>
+          <button type="button" onClick={() => setDeleteStatus(null)} className="shrink-0 font-bold opacity-60 hover:opacity-100">&times;</button>
+        </div>
+      )}
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-serif font-bold text-foreground">New Projects</h1>
         <Link 

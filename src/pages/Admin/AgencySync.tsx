@@ -8,6 +8,7 @@ const AgencySync = () => {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<any[]>([]);
   const [token, setToken] = useState('');
+  const [scrapeError, setScrapeError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const withTimeout = async <T,>(promise: Promise<T>, ms: number) => {
@@ -33,16 +34,33 @@ const AgencySync = () => {
     if (urls.length === 0) return;
     setLoading(true);
     setItems([]);
+    setScrapeError(null);
     try {
+      // Explicitly pass the session JWT so the Edge Function receives it
+      // even if the safeFetch wrapper interferes with the automatic header injection
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      if (token.trim()) {
+        headers['x-scraper-token'] = token.trim();
+      }
+      const invokeOptions: any = { body: { urls }, headers };
       const { data, error } = await withTimeout(
-        supabase.functions.invoke('scrape-properties', { body: { urls } }),
+        supabase.functions.invoke('scrape-properties', invokeOptions),
         45000
       );
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      setItems(data?.items || []);
+      const scraped = data?.items || [];
+      setItems(scraped);
+      const failed = scraped.filter((it: any) => it.error);
+      if (failed.length > 0) {
+        setScrapeError(`${failed.length} URL(s) failed: ${failed.map((f: any) => `${f.url} — ${f.error}`).join('; ')}`);
+      }
     } catch (e: any) {
-      alert(`Scrape failed: ${errorMessage(e)}`);
+      setScrapeError(`Scrape failed: ${errorMessage(e)}`);
     } finally {
       setLoading(false);
     }
@@ -54,6 +72,13 @@ const AgencySync = () => {
         <h1 className="text-2xl font-serif font-bold text-foreground">Agency Sync</h1>
         <Link to="/admin/properties" className="underline text-sm">Back to Properties</Link>
       </div>
+
+      {scrapeError && (
+        <div className="mb-4 p-4 rounded-sm border bg-destructive/10 border-destructive/30 text-destructive text-sm flex items-start justify-between gap-4">
+          <span>{scrapeError}</span>
+          <button type="button" onClick={() => setScrapeError(null)} className="shrink-0 font-bold opacity-60 hover:opacity-100">&times;</button>
+        </div>
+      )}
 
       <div className="bg-card p-6 rounded-sm border border-border shadow-sm space-y-4">
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -94,8 +119,7 @@ const AgencySync = () => {
                 onClick={() => {
                   const json = JSON.stringify(items, null, 2);
                   localStorage.setItem('kb_sync_prefill', json);
-                  navigator.clipboard.writeText(json);
-                  alert('Copied to clipboard! Redirecting to Sync tool...');
+                  navigator.clipboard.writeText(json).catch(() => {});
                   navigate('/admin/properties/sync', { state: { prefillJson: json } });
                 }}
                 className="text-xs uppercase font-bold text-primary hover:underline"

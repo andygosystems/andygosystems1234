@@ -145,22 +145,93 @@ CREATE POLICY "Public can view properties" ON public.properties FOR SELECT USING
 CREATE POLICY "Public can view images" ON public.property_images FOR SELECT USING (true);
 CREATE POLICY "Public can view amenities" ON public.property_amenities FOR SELECT USING (true);
 
--- Admin Full access to everything (using auth.uid and profiles check)
-CREATE POLICY "Admins have full access to profiles" ON public.profiles FOR ALL USING (role = 'admin');
-CREATE POLICY "Admins have full access to properties" ON public.properties FOR ALL USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
-CREATE POLICY "Admins have full access to property_images" ON public.property_images FOR ALL USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
-CREATE POLICY "Admins have full access to property_amenities" ON public.property_amenities FOR ALL USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
-CREATE POLICY "Admins have full access to leads" ON public.leads FOR ALL USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
-CREATE POLICY "Admins have full access to messages" ON public.messages FOR ALL USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
-CREATE POLICY "Admins have full access to KB" ON public.knowledge_base FOR ALL USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
-CREATE POLICY "Admins have full access to leases" ON public.leases FOR ALL USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
-CREATE POLICY "Admins have full access to maintenance" ON public.maintenance_costs FOR ALL USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+-- Profiles: users can read their own; admins can read/write all
+CREATE POLICY "Users can view own profile" ON public.profiles
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Admins have full access to profiles" ON public.profiles
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+CREATE POLICY "Admins have full access to properties" ON public.properties
+  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+
+CREATE POLICY "Admins have full access to property_images" ON public.property_images
+  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+
+CREATE POLICY "Admins have full access to property_amenities" ON public.property_amenities
+  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+
+CREATE POLICY "Admins have full access to leads" ON public.leads
+  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+
+CREATE POLICY "Admins have full access to messages" ON public.messages
+  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+
+CREATE POLICY "Admins have full access to KB" ON public.knowledge_base
+  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+
+CREATE POLICY "Admins have full access to leases" ON public.leases
+  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+
+CREATE POLICY "Admins have full access to maintenance" ON public.maintenance_costs
+  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
 
 -- Public can insert leads/messages
 CREATE POLICY "Public can insert leads" ON public.leads FOR INSERT WITH CHECK (true);
 CREATE POLICY "Public can insert messages" ON public.messages FOR INSERT WITH CHECK (true);
 
--- 10. Helper function for Vector Search
+-- 10. Storage: property-images bucket + policies
+INSERT INTO storage.buckets (id, name, public)
+  VALUES ('property-images', 'property-images', true)
+  ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public can view property images" ON storage.objects
+  FOR SELECT USING (bucket_id = 'property-images');
+
+CREATE POLICY "Admins can upload property images" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'property-images' AND
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+
+CREATE POLICY "Admins can update property images" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'property-images' AND
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+
+CREATE POLICY "Admins can delete property images" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'property-images' AND
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+
+-- 11. Auto-create profile on new user signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, role)
+  VALUES (NEW.id, NEW.email, 'user')
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- IMPORTANT: To grant admin access to an existing user, run:
+-- UPDATE public.profiles SET role = 'admin' WHERE email = 'your-admin@email.com';
+
+-- 12. Helper function for Vector Search
 CREATE OR REPLACE FUNCTION match_kb (
   query_embedding VECTOR(1536),
   match_threshold FLOAT,

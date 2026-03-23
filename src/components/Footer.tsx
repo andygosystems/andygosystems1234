@@ -29,9 +29,13 @@ const Footer = () => {
               <MapPin className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
               <span className="text-sm tracking-wide">Bofa Rd. - Kilifi, Kenya</span>
             </a>
-            <a href="tel:+254733323273" className="flex items-center gap-3 text-muted-foreground hover:text-primary transition-colors cursor-pointer group">
+            <a href="tel:+254782180777" className="flex items-center gap-3 text-muted-foreground hover:text-primary transition-colors cursor-pointer group">
               <Phone className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
-              <span className="text-sm tracking-wide">+254 733 323 273</span>
+              <span className="text-sm tracking-wide">+254 782 180777</span>
+            </a>
+            <a href="tel:+254722707248" className="flex items-center gap-3 text-muted-foreground hover:text-primary transition-colors cursor-pointer group">
+              <Phone className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+              <span className="text-sm tracking-wide">+254 722 707248</span>
             </a>
             <a href="mailto:info@krugerrbrendt.com" className="flex items-center gap-3 text-muted-foreground hover:text-primary transition-colors cursor-pointer group">
               <Mail className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />

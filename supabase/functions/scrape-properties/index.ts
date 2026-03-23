@@ -1,3 +1,5 @@
+// @ts-nocheck
+// This file runs on Deno (Supabase Edge Functions). TS errors about Deno/stdlib are expected in the local compiler.
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
 type ScrapeRequest = { urls?: string[] };
@@ -11,7 +13,8 @@ type ScrapeItem = {
   currency?: string;
   location?: string;
   plot_size?: string;
-  land_category?: string;
+  land_category?: 'Residential' | 'Commercial' | 'Agricultural' | 'Industrial';
+  tenure_type?: 'Freehold' | 'Leasehold_99' | 'Leasehold_999';
   amenities?: string[];
   error?: string;
 };
@@ -20,7 +23,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-scraper-token, x-requested-with",
 };
 
 const json = (body: unknown, init: ResponseInit = {}) =>
@@ -65,18 +68,30 @@ const baseHeaders: Record<string, string> = {
 const looksBlocked = (html: string) => {
   const h = (html || "").toLowerCase();
   if (!h) return true;
-  if (h.includes("captcha")) return true;
-  if (h.includes("cloudflare")) return true;
-  if (h.includes("attention required")) return true;
-  if (h.includes("access denied")) return true;
-  if (h.includes("unusual traffic")) return true;
-  if (h.includes("verify you are human")) return true;
-  if (h.includes("enable javascript")) return true;
+  // Hard block signals — always block regardless of content length
+  if (h.includes("captcha") || h.includes("cloudflare") ||
+      h.includes("attention required") || h.includes("unusual traffic") ||
+      h.includes("verify you are human")) return true;
+  // Soft block signals — only block if the page has very little real content
+  // (e.g. a noscript "enable javascript" tag on a real SSR page shouldn't block scraping)
+  const textLen = stripHtml(html).length;
+  if (textLen < 2000 && (h.includes("access denied") || h.includes("enable javascript"))) return true;
   return false;
 };
 
+const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs: number) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { ...options, signal: controller.signal });
+    return r;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 const fetchHtmlDirect = async (url: string) => {
-  const r = await fetch(url, { headers: baseHeaders, redirect: "follow" });
+  const r = await fetchWithTimeout(url, { headers: baseHeaders, redirect: "follow" }, 18000);
   const html = await r.text();
   return { ok: r.ok, status: r.status, html, via: "direct" as const };
 };
@@ -84,12 +99,9 @@ const fetchHtmlDirect = async (url: string) => {
 const fetchHtmlZenRows = async (url: string, apiKey: string) => {
   const proxyUrl =
     `https://api.zenrows.com/v1/?url=${encodeURIComponent(url)}&js_render=true&premium_proxy=true`;
-  const r = await fetch(proxyUrl, {
-    headers: {
-      ...baseHeaders,
-      Authorization: `Bearer ${apiKey}`,
-    },
-  });
+  const r = await fetchWithTimeout(proxyUrl, {
+    headers: { ...baseHeaders, Authorization: `Bearer ${apiKey}` },
+  }, 25000);
   const html = await r.text();
   return { ok: r.ok, status: r.status, html, via: "zenrows" as const };
 };
@@ -97,15 +109,21 @@ const fetchHtmlZenRows = async (url: string, apiKey: string) => {
 const fetchHtmlScrapingBee = async (url: string, apiKey: string) => {
   const proxyUrl =
     `https://app.scrapingbee.com/api/v1/?api_key=${encodeURIComponent(apiKey)}&url=${encodeURIComponent(url)}&render_js=true`;
-  const r = await fetch(proxyUrl, { headers: baseHeaders });
+  const r = await fetchWithTimeout(proxyUrl, { headers: baseHeaders }, 25000);
   const html = await r.text();
   return { ok: r.ok, status: r.status, html, via: "scrapingbee" as const };
 };
 
 const fetchHtmlJina = async (url: string) => {
-  const normalized = url.replace(/^https?:\/\//i, "");
-  const proxyUrl = `https://r.jina.ai/http://${normalized}`;
-  const r = await fetch(proxyUrl, { headers: { "User-Agent": baseHeaders["User-Agent"] } });
+  // Pass the URL directly so https:// is preserved
+  const proxyUrl = `https://r.jina.ai/${url}`;
+  const r = await fetchWithTimeout(proxyUrl, {
+    headers: {
+      "User-Agent": baseHeaders["User-Agent"],
+      "Accept": "text/plain,text/html,*/*",
+      "X-Return-Format": "text",
+    }
+  }, 25000);
   const html = await r.text();
   return { ok: r.ok, status: r.status, html, via: "jina" as const };
 };
@@ -126,12 +144,20 @@ const fetchHtmlWithFallback = async (url: string) => {
     if (bee.ok && !looksBlocked(bee.html)) return bee;
   }
 
-  const jina = await fetchHtmlJina(url);
-  if (jina.ok && jina.html.trim().length > 200) return jina;
+  // Try Jina AI reader (handles JS-heavy pages)
+  try {
+    const jina = await fetchHtmlJina(url);
+    if (jina.ok && jina.html.trim().length > 300) return jina;
+  } catch (_) { /* Jina failed — continue to fallback */ }
+
+  // Last resort: if direct fetch had substantial content, use it anyway
+  // (handles SSR sites like BuyRentKenya where looksBlocked fired on a noscript tag
+  //  but the real listing data is still present in the server-rendered HTML)
+  if (direct.ok && stripHtml(direct.html).length > 1000) return direct;
 
   const sample = stripHtml(direct.html || "").slice(0, 240);
   const reason = direct.ok ? "blocked" : `http_${direct.status}`;
-  throw new Error(`${reason}_via_${direct.via}: ${sample}`);
+  throw new Error(`${reason}: ${sample}`);
 };
 
 serve(async (req) => {
@@ -188,9 +214,7 @@ serve(async (req) => {
     "1/2 acre",
   ];
 
-  const results: ScrapeItem[] = [];
-
-  for (const url of urls) {
+  const scrapeOne = async (url: string): Promise<ScrapeItem> => {
     try {
       const fetched = await fetchHtmlWithFallback(url);
       const html = fetched.html;
@@ -238,8 +262,29 @@ serve(async (req) => {
       let currency: string | undefined;
       let location: string | undefined;
       let plot_size: string | undefined;
-      let land_category: string | undefined;
+      let land_category: 'Residential' | 'Commercial' | 'Agricultural' | 'Industrial' | undefined;
+      let tenure_type: 'Freehold' | 'Leasehold_99' | 'Leasehold_999' | undefined;
       let amenities: string[] | undefined;
+
+      // Detect land_category from page content (applies to all sources)
+      if (lowerText.includes('agricultural') || lowerText.includes('farming') || lowerText.includes('farm land')) {
+        land_category = 'Agricultural';
+      } else if (lowerText.includes('commercial') || lowerText.includes('business park') || lowerText.includes('retail')) {
+        land_category = 'Commercial';
+      } else if (lowerText.includes('industrial') || lowerText.includes('warehouse') || lowerText.includes('factory')) {
+        land_category = 'Industrial';
+      } else {
+        land_category = 'Residential';
+      }
+
+      // Detect tenure_type from page content (applies to all sources)
+      if (lowerText.includes('leasehold 999') || lowerText.includes('999 year')) {
+        tenure_type = 'Leasehold_999';
+      } else if (lowerText.includes('leasehold 99') || lowerText.includes('99 year') || lowerText.includes('leasehold')) {
+        tenure_type = 'Leasehold_99';
+      } else if (lowerText.includes('freehold')) {
+        tenure_type = 'Freehold';
+      }
 
       if (url.includes("buyrentkenya.com/")) {
         const priceMatch = text.match(/KSh\s*([\d,]+)/i);
@@ -260,9 +305,6 @@ serve(async (req) => {
 
         const acreageMatch = (description || text).match(/\b(\d+(?:\.\d+)?)\s*(?:ac|acre|acres)\b/i);
         if (acreageMatch) plot_size = `${acreageMatch[1]} acres`;
-
-        if (lowerText.includes("freehold")) land_category = "freehold";
-        else if (lowerText.includes("leasehold")) land_category = "leasehold";
 
         const nearbyBlock =
           text.match(/Nearby\s+([\s\S]*?)\s+Similar Properties/i) ||
@@ -294,7 +336,7 @@ serve(async (req) => {
         description = lines.slice(1, 8).join("\n").trim();
       }
 
-      results.push({
+      return {
         url,
         title,
         description,
@@ -305,12 +347,19 @@ serve(async (req) => {
         location,
         plot_size,
         land_category,
+        tenure_type,
         amenities,
-      });
+      };
     } catch (e) {
-      results.push({ url, error: e instanceof Error ? e.message : String(e) });
+      return { url, error: e instanceof Error ? e.message : String(e) };
     }
-  }
+  };
+
+  // Scrape all URLs in parallel so one slow/blocked URL doesn't time out everything
+  const settled = await Promise.allSettled(urls.map(scrapeOne));
+  const results: ScrapeItem[] = settled.map((r, i) =>
+    r.status === "fulfilled" ? r.value : { url: urls[i], error: String((r as PromiseRejectedResult).reason) }
+  );
 
   return json({ items: results }, { status: 200 });
 });

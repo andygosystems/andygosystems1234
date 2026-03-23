@@ -37,7 +37,9 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [allSessions, setAllSessions] = useState<ChatSession[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(() => {
+    try { return localStorage.getItem('krugerr_current_session_id'); } catch { return null; }
+  });
   const inFlight = React.useRef(false);
   const [mySessionIds, setMySessionIds] = useState<string[]>(() => {
     try {

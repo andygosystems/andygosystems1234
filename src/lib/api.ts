@@ -198,7 +198,10 @@ export const api = {
           lat: parseFloat(p.lat) || null,
           lng: parseFloat(p.lng) || null,
           property_type: p.property_type || null,
-          virtual_tour_url: p.virtual_tour_url || null
+          virtual_tour_url: p.virtual_tour_url || null,
+          land_category: p.land_category || null,
+          tenure_type: p.tenure_type || null,
+          plot_size: p.plot_size || null,
         }));
 
         const { data: inserted, error: insertErr } = await withRetry(() =>
@@ -237,12 +240,22 @@ export const api = {
 
         if (imageRows.length > 0) {
           const { error: imgErr } = await withRetry(() => asPromise(supabase.from('property_images').insert(imageRows)));
-          if (imgErr) console.error("Supabase bulk image insert error:", errorMessage(imgErr));
+          if (imgErr) {
+            console.error("Supabase bulk image insert error:", errorMessage(imgErr));
+            for (const r of results.filter(r => r.status === 'ok' && insertedRows.some((ins: any) => ins.id === r.id))) {
+              r.details = (r.details ? r.details + '; ' : '') + `Image insert failed: ${errorMessage(imgErr)}`;
+            }
+          }
         }
 
         if (amenityRows.length > 0) {
           const { error: amErr } = await withRetry(() => asPromise(supabase.from('property_amenities').insert(amenityRows)));
-          if (amErr) console.error("Supabase bulk amenities insert error:", errorMessage(amErr));
+          if (amErr) {
+            console.error("Supabase bulk amenities insert error:", errorMessage(amErr));
+            for (const r of results.filter(r => r.status === 'ok' && insertedRows.some((ins: any) => ins.id === r.id))) {
+              r.details = (r.details ? r.details + '; ' : '') + `Amenity insert failed: ${errorMessage(amErr)}`;
+            }
+          }
         }
       } catch (e: any) {
         const msg = errorMessage(e);
@@ -348,26 +361,27 @@ export const api = {
   },
 
   uploadImage: async (file: File) => {
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${fileName}`;
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`;
+    const filePath = `properties/${fileName}`;
 
-      const { error } = await supabase.storage
-        .from('property-images')
-        .upload(filePath, file);
+    const { error } = await supabase.storage
+      .from('property-images')
+      .upload(filePath, file, { cacheControl: '3600', upsert: false });
 
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('property-images')
-        .getPublicUrl(filePath);
-
-      return { url: publicUrl };
-    } catch (e: any) {
-      console.error("Upload error:", e);
-      throw e;
+    if (error) {
+      throw new Error(
+        error.message === 'The resource already exists'
+          ? `File already exists: ${fileName}`
+          : `Storage upload failed: ${error.message} (Check that the "property-images" bucket exists and the admin has INSERT policy on storage.objects)`
+      );
     }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('property-images')
+      .getPublicUrl(filePath);
+
+    return { url: publicUrl };
   },
 
   // --- PROJECTS ---

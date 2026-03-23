@@ -12,10 +12,12 @@ const AdminChats: React.FC = () => {
 
   // Filter sessions based on search
   const filteredSessions = allSessions.filter(session => {
-    // Basic search on session ID or message content
     const searchLower = searchTerm.toLowerCase();
+    if (!searchLower) return true;
     const hasMatchingMessage = session.messages.some(m => m.text.toLowerCase().includes(searchLower));
-    return session.id.toLowerCase().includes(searchLower) || hasMatchingMessage;
+    const nameMatch = session.userName?.toLowerCase().includes(searchLower);
+    const phoneMatch = session.userPhone?.toLowerCase().includes(searchLower);
+    return session.id.toLowerCase().includes(searchLower) || hasMatchingMessage || nameMatch || phoneMatch;
   });
 
   const handleDelete = (id: string) => {
@@ -179,8 +181,17 @@ const AdminChats: React.FC = () => {
                     <User className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <h2 className="font-bold text-foreground">Session: {selectedSession.id}</h2>
-                    <p className="text-xs text-muted-foreground">Started: {formatDate(selectedSession.startTime)}</p>
+                    <h2 className="font-bold text-foreground">
+                      {selectedSession.userName || `Guest ${selectedSession.id.substring(0, 6)}`}
+                    </h2>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                      {selectedSession.userPhone && (
+                        <a href={`tel:${selectedSession.userPhone}`} className="hover:text-primary transition-colors">
+                          {selectedSession.userPhone}
+                        </a>
+                      )}
+                      <span>Started: {formatDate(selectedSession.startTime)}</span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
