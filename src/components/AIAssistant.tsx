@@ -99,9 +99,8 @@ const AIAssistant = () => {
   }, [messages, isOpen]);
 
   const notifyAgent = (msg: string) => {
-    const text = encodeURIComponent(`*New Website Inquiry*\n\nUser Message: ${msg}`);
+    const text = encodeURIComponent(`*New Website Inquiry*\n\nFrom KB Assistant\nUser: ${registration?.name || 'Guest'} | ${registration?.phone || 'N/A'}\nMessage: ${msg}`);
     window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${text}`, '_blank');
-    window.open(`https://wa.me/${WHATSAPP_NUMBER_2}?text=${text}`, '_blank');
   };
 
   const handleSend = async (e?: React.FormEvent) => {
@@ -251,7 +250,7 @@ const AIAssistant = () => {
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="mb-4 bg-card rounded-lg shadow-2xl border border-primary/20 w-80 sm:w-96 overflow-hidden flex flex-col"
+            className="mb-4 bg-card rounded-lg shadow-2xl border border-primary/20 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden flex flex-col"
           >
             {/* Header */}
             <div className="bg-primary p-4 flex justify-between items-center border-b border-primary/30">
@@ -267,22 +266,22 @@ const AIAssistant = () => {
               <div className="flex items-center gap-2">
                 <button 
                   onClick={() => setViewMode(viewMode === 'chat' ? 'history' : 'chat')}
-                  className="text-primary-foreground/80 hover:text-primary-foreground transition-colors p-1"
-                  title={viewMode === 'chat' ? "History" : "Back to Chat"}
+                  aria-label={viewMode === 'chat' ? 'View chat history' : 'Back to chat'}
+                  className="text-primary-foreground/80 hover:text-primary-foreground transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center rounded"
                 >
                   {viewMode === 'chat' ? <History className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
                 </button>
-                {/* Removed RefreshCw button as requested */}
                 <button 
                   onClick={() => notifyAgent("I would like to speak to an agent.")}
-                  className="text-primary-foreground/80 hover:text-primary-foreground transition-colors p-1"
-                  title="Connect on WhatsApp"
+                  aria-label="Connect with agent on WhatsApp"
+                  className="text-primary-foreground/80 hover:text-primary-foreground transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center rounded"
                 >
                   <Phone className="w-5 h-5" />
                 </button>
                 <button 
                   onClick={() => setIsOpen(false)}
-                  className="text-primary-foreground/80 hover:text-primary-foreground transition-colors p-1"
+                  aria-label="Close assistant"
+                  className="text-primary-foreground/80 hover:text-primary-foreground transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center rounded"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -291,7 +290,7 @@ const AIAssistant = () => {
 
             {/* Chat/History Area */}
             {viewMode === 'chat' && !registration ? (
-               <div className="h-80 p-6 bg-muted/30 flex flex-col justify-center items-center gap-4">
+               <div className="h-[min(20rem,45vh)] p-6 bg-muted/30 flex flex-col justify-center items-center gap-4">
                   <div className="text-center space-y-2 mb-2">
                     <h4 className="font-serif text-lg text-primary">Welcome</h4>
                     <p className="text-xs text-muted-foreground">Please provide your details to start chatting.</p>
@@ -327,7 +326,7 @@ const AIAssistant = () => {
                   </form>
                </div>
             ) : (
-            <div className="h-80 overflow-y-auto p-4 bg-muted/30 flex flex-col gap-4">
+            <div className="h-[min(20rem,45vh)] overflow-y-auto p-4 bg-muted/30 flex flex-col gap-4">
               {viewMode === 'chat' ? (
                 <>
                   {messages.map((msg, idx) => (
@@ -412,7 +411,8 @@ const AIAssistant = () => {
               <button
                 type="submit"
                 disabled={!input.trim()}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground p-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Send message"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -427,10 +427,11 @@ const AIAssistant = () => {
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           onClick={() => setIsOpen(true)}
-          className="bg-primary hover:bg-primary-dark text-primary-foreground p-4 rounded-full shadow-lg transition-colors group relative"
+          aria-label="Open KB AI Assistant"
+          className="bg-primary hover:bg-primary-dark text-primary-foreground min-w-[56px] min-h-[56px] flex items-center justify-center rounded-full shadow-lg transition-colors relative"
         >
           <MessageSquare className="w-6 h-6" />
-          <span className="absolute right-0 top-0 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
+          <span className="absolute right-0 top-0 w-3 h-3 bg-red-500 rounded-full border-2 border-white" aria-hidden="true"></span>
         </motion.button>
       )}
     </div>

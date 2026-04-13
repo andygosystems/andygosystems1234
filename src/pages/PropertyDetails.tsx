@@ -6,6 +6,8 @@ import { MapPin, Bed, Bath, Square, ArrowLeft, Share, Heart, X, ChevronLeft, Che
 import { useCurrency } from '../context/CurrencyContext';
 import { useProperty } from '../context/PropertyContext';
 import InquiryForm from '../components/CRM/InquiryForm';
+import PropertyCard from '../components/PropertyCard';
+import SEO from '../components/SEO';
 import CurrencyCalculator from '../components/CurrencyCalculator';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -27,7 +29,7 @@ L.Marker.prototype.options.icon = DefaultIcon;
 const PropertyDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { getPropertyById, incrementVisits, loading: contextLoading } = useProperty();
+  const { getPropertyById, incrementVisits, loading: contextLoading, properties } = useProperty();
   const [loading, setLoading] = useState(true);
   const { formatPrice } = useCurrency();
   const [showFullGallery, setShowFullGallery] = useState(false);
@@ -91,6 +93,42 @@ const PropertyDetails = () => {
   const description = property.description || 'No description available for this property.';
   const images = (property.images && property.images.length > 0) ? property.images : ['/placeholder-property.jpg'];
 
+  const rawPrice = parseFloat(String(property.price).replace(/[^0-9.]/g, '')) || 0;
+  const area = property.location.split(',')[0].trim();
+  const areaKeyword = area.toLowerCase().split(' ')[0];
+  const relatedProperties = (properties || [])
+    .filter(p => String(p.id) !== String(id) && p.location.toLowerCase().includes(areaKeyword))
+    .slice(0, 3);
+
+  const metaDescription = `${property.beds ? property.beds + '-bed, ' : ''}${property.baths ? property.baths + '-bath ' : ''}${property.type === 'Sale' ? 'property for sale' : 'rental property'} in ${property.location}, Kenya. ${description.substring(0, 115)}`.trim();
+
+  const propertySchema: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'RealEstateListing',
+    name: property.title,
+    description: description.substring(0, 500),
+    url: `https://krugerrbrendt.com/property/${property.id}`,
+    image: images.slice(0, 5),
+    numberOfRooms: property.beds,
+    numberOfBathroomsTotal: property.baths,
+    ...(property.sqft ? { floorSize: { '@type': 'QuantitativeValue', value: property.sqft, unitCode: 'FTK' } } : {}),
+    offers: {
+      '@type': 'Offer',
+      price: rawPrice,
+      priceCurrency: 'KES',
+      availability: 'https://schema.org/InStock',
+      seller: { '@type': 'Organization', name: 'Krugerr Brendt Real Estate', url: 'https://krugerrbrendt.com' }
+    },
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: property.location,
+      addressLocality: property.location,
+      addressRegion: 'Nairobi',
+      addressCountry: 'KE'
+    },
+    ...(property.coords ? { geo: { '@type': 'GeoCoordinates', latitude: property.coords[0], longitude: property.coords[1] } } : {})
+  };
+
   const handleImageClick = (index: number) => {
     setCurrentImageIndex(index);
     setShowFullGallery(true);
@@ -108,6 +146,14 @@ const PropertyDetails = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
+      <SEO
+        title={property.title}
+        description={metaDescription}
+        canonical={`/property/${property.id}`}
+        image={images[0]}
+        type="website"
+        schema={propertySchema}
+      />
       <Navbar />
       
       {/* Fullscreen Gallery Modal */}
@@ -121,23 +167,26 @@ const PropertyDetails = () => {
           >
             <button 
               onClick={() => setShowFullGallery(false)}
-              className="absolute top-6 right-6 p-2 bg-black/50 hover:bg-white/20 text-white rounded-full transition-colors z-50"
+              aria-label="Close photo gallery"
+              className="absolute top-6 right-6 p-2 bg-black/50 hover:bg-white/20 text-white rounded-full transition-colors z-50 min-w-[44px] min-h-[44px]"
             >
-              <X className="w-6 h-6" />
+              <X className="w-6 h-6" aria-hidden="true" />
             </button>
 
             <button 
               onClick={prevImage}
-              className="absolute left-4 md:left-8 p-3 bg-black/50 hover:bg-white/20 text-white rounded-full transition-colors z-50"
+              aria-label="Previous photo"
+              className="absolute left-4 md:left-8 p-3 bg-black/50 hover:bg-white/20 text-white rounded-full transition-colors z-50 min-w-[44px] min-h-[44px]"
             >
-              <ChevronLeft className="w-8 h-8" />
+              <ChevronLeft className="w-8 h-8" aria-hidden="true" />
             </button>
 
             <button 
               onClick={nextImage}
-              className="absolute right-4 md:right-8 p-3 bg-black/50 hover:bg-white/20 text-white rounded-full transition-colors z-50"
+              aria-label="Next photo"
+              className="absolute right-4 md:right-8 p-3 bg-black/50 hover:bg-white/20 text-white rounded-full transition-colors z-50 min-w-[44px] min-h-[44px]"
             >
-              <ChevronRight className="w-8 h-8" />
+              <ChevronRight className="w-8 h-8" aria-hidden="true" />
             </button>
 
             <div className="w-full h-full p-4 md:p-12 flex items-center justify-center">
@@ -147,7 +196,7 @@ const PropertyDetails = () => {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 src={images[currentImageIndex]} 
-                alt={`Gallery View ${currentImageIndex + 1}`}
+                alt={`${property.title} in ${property.location} — photo ${currentImageIndex + 1} of ${images.length}`}
                 className="max-h-full max-w-full object-contain select-none"
               />
             </div>
@@ -159,42 +208,43 @@ const PropertyDetails = () => {
         )}
       </AnimatePresence>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-8 pt-24 pb-12">
+      <main className="max-w-7xl mx-auto px-4 md:px-8 pt-24 pb-12">
         {/* Header Section */}
-        <div className="mb-6">
+        <header className="mb-6">
           <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">{property.title}</h1>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div className="flex items-center gap-2 text-sm md:text-base underline font-medium text-foreground cursor-pointer hover:text-primary transition-colors">
-              <MapPin className="w-4 h-4 text-primary" />
+            <address className="flex items-center gap-2 text-sm md:text-base not-italic underline font-medium text-foreground cursor-pointer hover:text-primary transition-colors">
+              <MapPin className="w-4 h-4 text-primary" aria-hidden="true" />
               {property.location}
-            </div>
+            </address>
             <div className="flex items-center gap-4 text-sm font-medium">
-              <button className="flex items-center gap-2 hover:bg-muted px-3 py-2 rounded-md transition-colors underline">
-                <Share className="w-4 h-4" /> Share
+              <button aria-label="Share this listing" className="flex items-center gap-2 hover:bg-muted px-3 py-2 rounded-md transition-colors underline min-h-[44px]">
+                <Share className="w-4 h-4" aria-hidden="true" /> Share
               </button>
-              <button className="flex items-center gap-2 hover:bg-muted px-3 py-2 rounded-md transition-colors underline">
-                <Heart className="w-4 h-4" /> Save
+              <button aria-label="Save this listing to favourites" className="flex items-center gap-2 hover:bg-muted px-3 py-2 rounded-md transition-colors underline min-h-[44px]">
+                <Heart className="w-4 h-4" aria-hidden="true" /> Save
               </button>
             </div>
           </div>
-        </div>
+        </header>
 
         {/* Photo Grid (Airbnb Style) */}
-        <div className="relative grid grid-cols-1 md:grid-cols-4 grid-rows-2 gap-2 h-[50vh] min-h-[400px] rounded-xl overflow-hidden mb-12">
-          {/* Main Large Image */}
+        <section aria-label={`Photo gallery for ${property.title}`} className="relative grid grid-cols-1 md:grid-cols-4 grid-rows-2 gap-2 h-[50vh] min-h-[400px] rounded-xl overflow-hidden mb-12">
+          {/* Hero Image — loaded eagerly, high priority */}
           <div 
             className="md:col-span-2 md:row-span-2 relative cursor-pointer group"
             onClick={() => handleImageClick(0)}
           >
             <img 
               src={images[0]} 
-              alt="Main Property View" 
+              alt={`${property.title} in ${property.location} — main view`}
+              decoding="async"
               className="w-full h-full object-cover transition-opacity duration-300 group-hover:brightness-90" 
             />
-            <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
           </div>
 
-          {/* Secondary Images Grid */}
+          {/* Secondary Images Grid — lazy loaded */}
           {images.slice(1, 5).map((img, idx) => (
             <div 
               key={idx} 
@@ -203,27 +253,30 @@ const PropertyDetails = () => {
             >
               <img 
                 src={img} 
-                alt={`View ${idx + 2}`} 
+                alt={`${property.title} — interior view ${idx + 2}`}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover transition-opacity duration-300 group-hover:brightness-90" 
               />
-              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
             </div>
           ))}
 
           {/* Show All Photos Button */}
           <button 
             onClick={() => setShowFullGallery(true)}
-            className="absolute bottom-4 right-4 bg-background/90 hover:bg-background text-foreground text-sm font-medium px-4 py-2 rounded-lg border border-border shadow-sm flex items-center gap-2 transition-all"
+            aria-label={`View all ${images.length} photos of ${property.title}`}
+            className="absolute bottom-4 right-4 bg-background/90 hover:bg-background text-foreground text-sm font-medium px-4 py-2 rounded-lg border border-border shadow-sm flex items-center gap-2 transition-all min-h-[44px]"
           >
-            <Grid className="w-4 h-4" /> Show all photos
+            <Grid className="w-4 h-4" aria-hidden="true" /> Show all photos
           </button>
-        </div>
+        </section>
 
         {/* Main Content Layout */}
         <div className="flex flex-col lg:flex-row gap-12 relative">
           
           {/* Left Column: Property Details */}
-          <div className="w-full lg:w-2/3">
+          <article className="w-full lg:w-2/3">
             {/* Title & Stats */}
             <div className="border-b border-border pb-8 mb-8">
               <h2 className="text-xl md:text-2xl font-serif font-medium text-foreground mb-2">
@@ -279,14 +332,14 @@ const PropertyDetails = () => {
                   </div>
                 ))}
               </div>
-              <button className="mt-6 border border-foreground/20 rounded-lg px-6 py-3 font-medium hover:bg-muted transition-colors text-sm">
+              <button aria-label={`Show all ${amenities.length} amenities for this property`} className="mt-6 border border-foreground/20 rounded-lg px-6 py-3 font-medium hover:bg-muted transition-colors text-sm min-h-[44px]">
                 Show all {amenities.length} amenities
               </button>
             </div>
-          </div>
+          </article>
 
           {/* Right Column: Sticky Booking Card */}
-          <div className="w-full lg:w-1/3">
+          <aside className="w-full lg:w-1/3" aria-label="Property pricing and contact">
             <div className="sticky top-28">
               <div className="bg-card rounded-xl border border-border shadow-xl overflow-hidden">
                 <div className="p-6">
@@ -309,7 +362,7 @@ const PropertyDetails = () => {
                   
                   <div className="mt-6">
                     {(() => {
-                      const agentPhone = '254700000000';
+                      const agentPhone = '254782180777';
                       const propertyLink = `${window.location.origin}/property/${property.id}`;
                       const message = encodeURIComponent(`Hello! I'm interested in "${property.title}". Here is the link: ${propertyLink}`);
                       const waUrl = `https://wa.me/${agentPhone}?text=${message}`;
@@ -318,7 +371,8 @@ const PropertyDetails = () => {
                           href={waUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="w-full inline-flex justify-center bg-green-500 text-white font-bold py-3 rounded-sm uppercase tracking-wide hover:bg-green-600 transition-colors text-sm"
+                          aria-label={`Contact agent on WhatsApp about ${property.title}`}
+                          className="w-full inline-flex justify-center items-center bg-green-500 text-white font-bold py-3 rounded-sm uppercase tracking-wide hover:bg-green-600 transition-colors text-sm min-h-[44px]"
                         >
                           Contact Agent on WhatsApp
                         </a>
@@ -329,17 +383,17 @@ const PropertyDetails = () => {
               </div>
               
               <div className="mt-6 flex items-center justify-center gap-2 text-muted-foreground text-sm">
-                <MapPin className="w-4 h-4" />
+                <MapPin className="w-4 h-4" aria-hidden="true" />
                 <span className="underline cursor-pointer">Report this listing</span>
               </div>
             </div>
-          </div>
+          </aside>
 
         </div>
         
         {/* Map Section */}
-        <div className="mt-12 pt-12 border-t border-border">
-          <h2 className="text-xl font-bold text-foreground mb-6">Where you'll be</h2>
+        <section className="mt-12 pt-12 border-t border-border" aria-labelledby="map-heading">
+          <h2 id="map-heading" className="text-xl font-bold text-foreground mb-6">Where you'll be</h2>
           <div className="h-[400px] rounded-xl overflow-hidden border border-border z-0 relative">
              <MapContainer 
                center={property.coords || [-4.0435, 39.6682]} 
@@ -359,12 +413,29 @@ const PropertyDetails = () => {
              </MapContainer>
           </div>
           <div className="mt-4 flex items-center gap-2 text-muted-foreground">
-             <MapPin className="w-5 h-5" />
+             <MapPin className="w-5 h-5" aria-hidden="true" />
              <p className="font-medium">{property.location}</p>
           </div>
-        </div>
+        </section>
 
-      </div>
+        {/* Related Properties in Same Area */}
+        {relatedProperties.length > 0 && (
+          <section className="mt-16 pt-12 border-t border-border" aria-labelledby="related-heading">
+            <h2 id="related-heading" className="text-xl font-bold text-foreground mb-1">
+              More properties in {area}
+            </h2>
+            <p className="text-sm text-muted-foreground mb-8">
+              Explore similar listings in {area} and surrounding areas.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {relatedProperties.map(p => (
+                <PropertyCard key={p.id} property={p as any} />
+              ))}
+            </div>
+          </section>
+        )}
+
+      </main>
       <Footer />
     </div>
   );

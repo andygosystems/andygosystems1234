@@ -50,18 +50,24 @@ const FloatingSocials = () => {
             {/* Header */}
             <div className="bg-primary px-4 py-3 flex justify-between items-center">
               <span className="text-primary-foreground font-serif text-sm tracking-wide font-bold">Get In Touch</span>
-              <button onClick={handleToggle} className="text-primary-foreground/80 hover:text-primary-foreground">
+              <button
+                onClick={handleToggle}
+                aria-label="Close contact panel"
+                className="text-primary-foreground/80 hover:text-primary-foreground min-w-[40px] min-h-[40px] flex items-center justify-center rounded"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-3 space-y-2">
+            <div className="p-3 space-y-2 max-h-[60vh] overflow-y-auto">
               {/* Phone numbers — expandable */}
               {NUMBERS.map((n, idx) => (
                 <div key={idx} className="rounded-lg border border-border overflow-hidden">
                   <button
                     onClick={() => handleNumberClick(idx)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 bg-muted/40 hover:bg-muted transition-colors text-left"
+                    aria-label={`${n.display} — choose call or WhatsApp`}
+                    aria-expanded={activeNumber === idx}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 bg-muted/40 hover:bg-muted transition-colors text-left min-h-[52px]"
                   >
                     <div className="w-8 h-8 rounded-full bg-[#25D366]/20 flex items-center justify-center shrink-0">
                       <Phone className="w-4 h-4 text-[#25D366]" />

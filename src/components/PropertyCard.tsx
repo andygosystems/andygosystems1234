@@ -49,10 +49,11 @@ const PropertyCard = ({ property }: { property: Property }) => {
   };
 
   return (
-    <motion.div 
+    <motion.article
       whileHover={{ y: -8 }}
       transition={{ duration: 0.3 }}
       className="group relative bg-card text-foreground border border-border overflow-hidden rounded-sm shadow-sm hover:shadow-xl transition-all duration-300"
+      aria-label={`${property.title} in ${property.location} — ${property.type === 'Sale' ? 'For Sale' : 'For Rent'}`}
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
         <div className="absolute top-2 left-2 flex gap-2 z-10">
@@ -78,8 +79,9 @@ const PropertyCard = ({ property }: { property: Property }) => {
             exit={{ opacity: 0, x: -100 }}
             transition={{ duration: 0.3 }}
             src={images[currentImage]}
-            alt={property.title}
+            alt={`${property.title} in ${property.location}${images.length > 1 ? ` — photo ${currentImage + 1} of ${images.length}` : ''}`}
             loading="lazy"
+            decoding="async"
             drag="x"
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.2}
@@ -99,15 +101,17 @@ const PropertyCard = ({ property }: { property: Property }) => {
         <div className="hidden md:flex absolute inset-0 items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20">
           <button 
             onClick={prevImage}
-            className="pointer-events-auto p-2 bg-background/80 hover:bg-primary hover:text-primary-foreground text-foreground transition-colors backdrop-blur-sm rounded-full shadow-lg"
+            aria-label={`Previous photo of ${property.title}`}
+            className="pointer-events-auto p-2 bg-background/80 hover:bg-primary hover:text-primary-foreground text-foreground transition-colors backdrop-blur-sm rounded-full shadow-lg min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-4 h-4" aria-hidden="true" />
           </button>
           <button 
             onClick={nextImage}
-            className="pointer-events-auto p-2 bg-background/80 hover:bg-primary hover:text-primary-foreground text-foreground transition-colors backdrop-blur-sm rounded-full shadow-lg"
+            aria-label={`Next photo of ${property.title}`}
+            className="pointer-events-auto p-2 bg-background/80 hover:bg-primary hover:text-primary-foreground text-foreground transition-colors backdrop-blur-sm rounded-full shadow-lg min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -115,6 +119,7 @@ const PropertyCard = ({ property }: { property: Property }) => {
         <Link 
           to={`/property/${property.id}`}
           className="absolute inset-0 z-10"
+          aria-label={`View details for ${property.title} in ${property.location}`}
           draggable={false}
         />
       </div>
@@ -143,7 +148,7 @@ const PropertyCard = ({ property }: { property: Property }) => {
           <p className="text-primary font-serif text-lg tracking-wide">{formatPrice(property.price)}</p>
         </div>
       </div>
-    </motion.div>
+    </motion.article>
   );
 };
 

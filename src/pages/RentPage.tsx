@@ -5,6 +5,7 @@ import PropertyCard from '../components/PropertyCard';
 import { useProperty } from '../context/PropertyContext';
 import { motion } from 'framer-motion';
 import KenyaSearchFilters, { defaultFilters, KenyaFilters } from '../components/KenyaSearchFilters';
+import SEO from '../components/SEO';
 
 const RentPage = () => {
   const { properties } = useProperty();
@@ -31,17 +32,23 @@ const RentPage = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <SEO
+        title="Luxury Rental Properties in Kenya"
+        description={`Browse ${rentProperties.length} premium rental properties in Nairobi, Mombasa, and Kenya’s top locations. Short-term and long-term rentals by Krugerr Brendt Real Estate.`}
+        canonical="/rent"
+        type="website"
+      />
       <Navbar />
-      <div className="pt-32 pb-12 bg-secondary text-secondary-foreground">
+      <section className="pt-32 pb-12 bg-secondary text-secondary-foreground">
         <div className="container mx-auto px-6 text-center">
           <h1 className="text-4xl md:text-5xl font-serif mb-4 text-secondary-foreground">Luxury Rentals</h1>
           <p className="text-lg text-secondary-foreground/80 max-w-2xl mx-auto font-light tracking-wide">
-            Discover our exclusive collection of premium rental properties in Kenya's most sought-after locations.
+            Discover our exclusive collection of premium rental properties in Kenya’s most sought-after locations.
           </p>
         </div>
-      </div>
+      </section>
       
-      <main className="flex-grow container mx-auto px-6 py-16">
+      <main className="flex-grow container mx-auto px-6 py-16" aria-label="Rental property listings">
         <KenyaSearchFilters value={filters} onChange={setFilters} />
         <div className="h-4" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">

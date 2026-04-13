@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import KenyaSearchFilters, { defaultFilters, KenyaFilters } from '../components/KenyaSearchFilters';
 import LandFilters, { LandFilters as LFilters } from '../components/LandFilters';
 import { useState } from 'react';
+import SEO from '../components/SEO';
 
 const BuyPage = () => {
   const { properties } = useProperty();
@@ -49,10 +50,16 @@ const BuyPage = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <SEO
+        title="Properties for Sale in Kenya"
+        description={`Browse ${saleProperties.length} luxury properties for sale in Nairobi, Mombasa, and Kenya’s most sought-after locations. Exclusive portfolio curated by Krugerr Brendt Real Estate.`}
+        canonical="/buy"
+        type="website"
+      />
       <Navbar />
       
       {/* Hero Section */}
-      <div className="relative pt-32 pb-20 bg-secondary text-secondary-foreground overflow-hidden">
+      <section className="relative pt-32 pb-20 bg-secondary text-secondary-foreground overflow-hidden">
         <div className="absolute inset-0 z-0 opacity-20">
            <img 
              src="https://images.unsplash.com/photo-1600596542815-e32c630bd1ba?q=80&w=2074&auto=format&fit=crop" 
@@ -77,9 +84,9 @@ const BuyPage = () => {
             Discover our handpicked collection of premier properties for sale in the world's most sought-after locations.
           </motion.p>
         </div>
-      </div>
+      </section>
 
-      <main className="flex-grow container mx-auto px-6 py-16">
+      <main className="flex-grow container mx-auto px-6 py-16" aria-label="Property listings for sale">
         <KenyaSearchFilters value={filters} onChange={setFilters} />
         <div className="h-4" />
         <LandFilters value={landFilters} onChange={setLandFilters} />
