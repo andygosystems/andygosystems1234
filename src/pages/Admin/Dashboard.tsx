@@ -5,13 +5,26 @@ import { useProperty } from '../../context/PropertyContext';
 import { useInquiry } from '../../context/InquiryContext';
 import { useChat } from '../../context/ChatContext';
 import { useVisits } from '../../context/VisitContext';
+import { supabase } from '../../lib/supabase';
 
 const AdminDashboard = () => {
   const { getStats: getPropertyStats, loading: propertiesLoading } = useProperty();
   const { getStats: getInquiryStats } = useInquiry();
   const { getStats: getChatStats } = useChat();
   const { getVisitStats } = useVisits();
-  
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { error } = await supabase.from('properties').select('id', { count: 'exact', head: true });
+        setDbStatus(error ? 'error' : 'connected');
+      } catch {
+        setDbStatus('error');
+      }
+    })();
+  }, []);
+
   const propertyStats = getPropertyStats();
   const inquiryStats = getInquiryStats();
   const chatStats = getChatStats();
@@ -112,12 +125,16 @@ const AdminDashboard = () => {
                <span className="text-sm font-bold">v2.4.0</span>
              </div>
              <div className="flex justify-between items-center border-b border-border pb-2">
-               <span className="text-sm text-muted-foreground">Database Status</span>
-               <span className="text-sm font-bold text-green-500">Connected (Local)</span>
+               <span className="text-sm text-muted-foreground">Supabase Status</span>
+               <span className={`text-sm font-bold ${
+                 dbStatus === 'connected' ? 'text-green-500' : dbStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'
+               }`}>
+                 {dbStatus === 'connected' ? 'Connected' : dbStatus === 'error' ? 'Connection Error' : 'Checking...'}
+               </span>
              </div>
              <div className="flex justify-between items-center">
-               <span className="text-sm text-muted-foreground">Last Backup</span>
-               <span className="text-sm font-bold">Today, 09:00 AM</span>
+               <span className="text-sm text-muted-foreground">Last Synced</span>
+               <span className="text-sm font-bold">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
              </div>
           </div>
         </div>

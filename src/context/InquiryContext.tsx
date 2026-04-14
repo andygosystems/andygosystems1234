@@ -10,7 +10,7 @@ export interface Inquiry {
   message: string;
   subject?: string;
   property_id?: string;
-  status: 'new' | 'read' | 'contacted' | 'archived';
+  status: 'new' | 'contacted' | 'qualified' | 'closed' | 'archived';
   date: string;
   notes?: string;
 }
@@ -90,11 +90,9 @@ export const InquiryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await loadInquiries();
     } catch (e) {
       console.error("Failed to add inquiry", e);
-      // If API fails, we keep the optimistic update (which might be saved locally by api.ts fallback)
-      // But api.sendInquiry ALREADY handles fallback and returns success message.
-      // So if it throws, it's a real error.
-      // But api.sendInquiry in my implementation catches errors and returns fallback result.
-      // So it shouldn't throw.
+      // Remove optimistic entry and re-throw so the UI can show an error state
+      setInquiries(prev => prev.filter(i => i.id !== tempId));
+      throw e;
     }
   };
 

@@ -134,7 +134,11 @@ export const api = {
               lat: parseFloat(p.lat) || null,
               lng: parseFloat(p.lng) || null,
               property_type: p.property_type || null,
-              virtual_tour_url: p.virtual_tour_url || null
+              virtual_tour_url: p.virtual_tour_url || null,
+              video_url: p.video_url || null,
+              video_urls: Array.isArray(p.video_urls) ? p.video_urls : (p.video_url ? [p.video_url] : []),
+              price_on_request: !!p.price_on_request,
+              flags: Array.isArray(p.flags) ? p.flags : []
             }])
             .select('id')
             .single()
@@ -290,6 +294,10 @@ export const api = {
           lng: p.lng === '' || p.lng === undefined ? null : (typeof p.lng === 'string' ? (parseFloat(p.lng) || null) : p.lng),
           property_type: p.property_type,
           virtual_tour_url: p.virtual_tour_url,
+          video_url: p.video_url || null,
+          video_urls: Array.isArray(p.video_urls) ? p.video_urls : (p.video_url ? [p.video_url] : []),
+          price_on_request: !!p.price_on_request,
+          flags: Array.isArray(p.flags) ? p.flags : [],
           land_category: p.land_category,
           tenure_type: p.tenure_type,
           plot_size: p.plot_size,
@@ -413,7 +421,8 @@ export const api = {
           start_date: p.startDate,
           progress: p.progress || 0,
           auto_progress: !!p.autoProgress,
-          status: p.status || 'Planning'
+          status: p.status || 'Planning',
+          video_url: p.videoUrl || null
         }])
         .select()
         .single();
@@ -439,6 +448,7 @@ export const api = {
           progress: p.progress,
           auto_progress: !!p.autoProgress,
           status: p.status,
+          video_url: p.videoUrl || null,
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
@@ -469,7 +479,12 @@ export const api = {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data;
+      // Normalize field names for the admin UI (DB uses 'name', UI expects 'customer_name')
+      return (data || []).map((row: any) => ({
+        ...row,
+        customer_name: row.customer_name || row.name || 'Unknown',
+        message: row.message || row.notes || '',
+      }));
     } catch (e: any) {
       console.error("Supabase getInquiries Error:", errorMessage(e));
       return [];
@@ -481,11 +496,12 @@ export const api = {
       const { data, error } = await supabase
         .from('leads')
         .insert([{
-          name: i.name,
-          email: i.email,
-          phone: i.phone,
-          message: i.message,
-          property_id: i.propertyId || null,
+          name: i.customer_name || i.name || 'Unknown',
+          email: i.email || null,
+          phone: i.phone || null,
+          message: i.message || null,
+          subject: i.subject || null,
+          property_id: i.property_id ? String(i.property_id) : (i.propertyId ? String(i.propertyId) : null),
           status: 'new'
         }])
         .select()
@@ -499,9 +515,19 @@ export const api = {
 
   updateInquiryStatus: async (id: string, status: string) => {
     try {
+      // Map frontend-only statuses to valid DB CHECK values
+      const dbStatusMap: Record<string, string> = {
+        archived: 'closed',
+        read: 'contacted',
+        qualified: 'qualified',
+        closed: 'closed',
+        contacted: 'contacted',
+        new: 'new',
+      };
+      const dbStatus = dbStatusMap[status] || 'new';
       const { error } = await supabase
         .from('leads')
-        .update({ status, updated_at: new Date().toISOString() })
+        .update({ status: dbStatus, updated_at: new Date().toISOString() })
         .eq('id', id);
       if (error) throw error;
       return { message: 'Updated' };
@@ -582,9 +608,10 @@ export const api = {
   // --- CHATS ---
   getChats: async () => {
     try {
+      // Use inner join so only leads that have AI chat messages appear in Chats panel
       const { data, error } = await supabase
         .from('leads')
-        .select('*, messages(*)')
+        .select('*, messages!inner(*)')
         .order('updated_at', { ascending: false });
       if (error) throw error;
       return (data || []).map(l => ({
@@ -594,7 +621,7 @@ export const api = {
         userName: l.name,
         userPhone: l.phone,
         leadId: l.id,
-        messages: l.messages.map((m: any) => ({
+        messages: (l.messages || []).map((m: any) => ({
           text: m.content,
           isBot: m.role === 'assistant',
           timestamp: m.created_at,
@@ -624,6 +651,26 @@ export const api = {
     } catch (e: any) {
       throw e;
     }
+  },
+
+  uploadVideo: async (file: File) => {
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'mp4';
+    const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`;
+    const filePath = `videos/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from('property-images')
+      .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+    if (error) {
+      throw new Error(`Video upload failed: ${error.message}`);
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('property-images')
+      .getPublicUrl(filePath);
+
+    return { url: publicUrl };
   },
 
   // --- SCRAPER ---

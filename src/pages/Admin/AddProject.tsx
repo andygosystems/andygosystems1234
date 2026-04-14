@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Upload, X, Loader2, Calendar, FileText } from 'lucide-react';
+import { Upload, X, Loader2, Calendar, FileText, Video, Link } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
 import { api } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
@@ -15,6 +15,10 @@ const AddProject = () => {
   const [previews, setPreviews] = useState<string[]>([]);
   const [brochure, setBrochure] = useState<File | null>(null);
   const [brochureName, setBrochureName] = useState<string>('');
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string>('');
+  const [videoUploading, setVideoUploading] = useState(false);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   
   const isEditMode = !!id;
@@ -27,7 +31,8 @@ const AddProject = () => {
     startDate: new Date().toISOString().split('T')[0],
     progress: 0,
     autoProgress: false,
-    status: 'Planning'
+    status: 'Planning',
+    videoUrl: ''
   });
 
   useEffect(() => {
@@ -42,11 +47,16 @@ const AddProject = () => {
           startDate: project.startDate || new Date().toISOString().split('T')[0],
           progress: project.progress,
           autoProgress: project.autoProgress,
-          status: project.status || 'Planning'
+          status: project.status || 'Planning',
+          videoUrl: (project as any).videoUrl || (project as any).video_url || ''
         });
         setPreviews(project.images);
         if (project.brochureUrl) {
             setBrochureName('Current Brochure.pdf');
+        }
+        const vurl = (project as any).videoUrl || (project as any).video_url;
+        if (vurl) {
+            setVideoPreview(vurl);
         }
       }
     }
@@ -101,6 +111,23 @@ const AddProject = () => {
       }
   };
 
+  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setVideoFile(file);
+      setVideoPreview(URL.createObjectURL(file));
+      setFormData(prev => ({ ...prev, videoUrl: '' }));
+    }
+  };
+
+  const removeVideo = () => {
+    setVideoFile(null);
+    if (videoPreview.startsWith('blob:')) URL.revokeObjectURL(videoPreview);
+    setVideoPreview('');
+    setFormData(prev => ({ ...prev, videoUrl: '' }));
+    if (videoInputRef.current) videoInputRef.current.value = '';
+  };
+
   const removeImage = (index: number) => {
     const url = previews[index];
     if (url?.startsWith('blob:')) {
@@ -142,6 +169,22 @@ const AddProject = () => {
         return;
       }
 
+      // --- Upload video if a file was selected ---
+      let finalVideoUrl = formData.videoUrl || '';
+      if (videoFile) {
+        try {
+          setVideoUploading(true);
+          const { url } = await api.uploadVideo(videoFile);
+          finalVideoUrl = url;
+        } catch (videoErr: any) {
+          setStatus({ type: 'error', message: `Video upload failed: ${videoErr?.message || 'unknown error'}` });
+          setLoading(false);
+          return;
+        } finally {
+          setVideoUploading(false);
+        }
+      }
+
       // --- Upload brochure PDF to Supabase Storage ---
       let brochureUrl: string | undefined = isEditMode ? getProjectById(id!)?.brochureUrl : undefined;
       if (brochure) {
@@ -171,7 +214,8 @@ const AddProject = () => {
         autoProgress: formData.autoProgress,
         status: formData.status as any,
         images: [...existingUrls, ...uploadedUrls],
-        brochureUrl
+        brochureUrl,
+        videoUrl: finalVideoUrl || undefined
       };
 
       if (isEditMode && id) {
@@ -332,6 +376,58 @@ const AddProject = () => {
                   ? "Progress is automatically calculated based on Start Date and Estimated Completion Date." 
                   : "Manually adjust the progress slider."}
               </p>
+            </div>
+          </div>
+
+          {/* Video Upload */}
+          <div>
+            <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Project Video</label>
+            <div className="space-y-3">
+              <div className="flex gap-2 items-center">
+                <Link className="w-4 h-4 text-muted-foreground shrink-0" />
+                <input
+                  type="url"
+                  value={formData.videoUrl}
+                  onChange={e => {
+                    setFormData({ ...formData, videoUrl: e.target.value });
+                    setVideoPreview(e.target.value);
+                    setVideoFile(null);
+                  }}
+                  placeholder="Paste YouTube, Vimeo, or direct MP4 URL..."
+                  className="flex-1 bg-input border border-input p-3 rounded-sm focus:outline-none focus:border-primary focus:bg-card transition-colors text-foreground placeholder:text-muted-foreground text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground uppercase">or upload file</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <div className="border-2 border-dashed border-border rounded-sm p-6 text-center hover:bg-muted transition-colors relative">
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/mp4,video/webm,video/ogg,video/mov,video/avi"
+                  onChange={handleVideoFileChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <Video className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground font-medium">Click to upload a video file (MP4, WebM)</p>
+                <p className="text-xs text-muted-foreground mt-1">Max recommended: 100MB</p>
+              </div>
+              {videoPreview && (
+                <div className="relative bg-black rounded-sm overflow-hidden">
+                  {videoPreview.includes('youtube') || videoPreview.includes('youtu.be') || videoPreview.includes('vimeo') ? (
+                    <div className="aspect-video flex items-center justify-center bg-muted">
+                      <p className="text-sm text-muted-foreground">External video linked: <a href={videoPreview} target="_blank" rel="noreferrer" className="text-primary underline">{videoPreview.slice(0, 60)}...</a></p>
+                    </div>
+                  ) : (
+                    <video src={videoPreview} controls className="w-full aspect-video" />
+                  )}
+                  <button type="button" onClick={removeVideo} className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

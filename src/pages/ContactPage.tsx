@@ -27,7 +27,7 @@ const ContactPage = () => {
     setSubmitStatus('idle');
     
     try {
-      addInquiry({
+      await addInquiry({
         customer_name: formData.name,
         email: formData.email,
         phone: formData.phone,

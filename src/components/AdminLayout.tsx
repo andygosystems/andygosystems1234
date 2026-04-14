@@ -10,7 +10,9 @@ import {
   Menu,
   X,
   Bot,
-  Hammer
+  Hammer,
+  FolderPlus,
+  BarChart2
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -27,11 +29,11 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navItems = [
     { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Overview' },
     { path: '/admin/properties', icon: Building2, label: 'All Properties' },
-    { path: '/admin/projects', icon: Hammer, label: 'New Projects' },
     { path: '/admin/properties/add', icon: PlusCircle, label: 'Add Property' },
-    { path: '/admin/leads', icon: MessageSquare, label: 'Leads Management' },
-    { path: '/admin/chats', icon: Bot, label: 'AI Conversations' },
-    { path: '/admin/crm', icon: LayoutDashboard, label: 'CRM Analytics' },
+    { path: '/admin/projects', icon: Hammer, label: 'New Projects' },
+    { path: '/admin/projects/add', icon: FolderPlus, label: 'Add Project' },
+    { path: '/admin/leads', icon: MessageSquare, label: 'CRM Hub' },
+    { path: '/admin/crm', icon: BarChart2, label: 'CRM Analytics' },
   ];
 
   return (
@@ -58,7 +60,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
         <nav className="p-4 space-y-2">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
+            const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/')  && item.path !== '/admin/projects' && item.path !== '/admin/properties';
             return (
               <Link
                 key={item.path}

@@ -23,10 +23,7 @@ const InquiryForm = ({ propertyId, propertyTitle }: InquiryFormProps) => {
     setStatus('submitting');
     
     try {
-      // Append phone to message since DB doesn't have a phone column yet
-      const fullMessage = `${formData.message}\n\nPhone: ${formData.phone}`;
-      
-      addInquiry({
+      await addInquiry({
         customer_name: formData.name,
         email: formData.email,
         phone: formData.phone,

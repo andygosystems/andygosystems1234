@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { MapPin, Bed, Bath, Square, ArrowLeft, Share, Heart, X, ChevronLeft, ChevronRight, Grid } from 'lucide-react';
+import { MapPin, Bed, Bath, Square, ArrowLeft, Share, Heart, X, ChevronLeft, ChevronRight, Grid, Video, ImageOff } from 'lucide-react';
 import { useCurrency } from '../context/CurrencyContext';
 import { useProperty } from '../context/PropertyContext';
 import InquiryForm from '../components/CRM/InquiryForm';
@@ -91,7 +91,9 @@ const PropertyDetails = () => {
   ];
 
   const description = property.description || 'No description available for this property.';
-  const images = (property.images && property.images.length > 0) ? property.images : ['/placeholder-property.jpg'];
+  const images = (property.images && property.images.length > 0) ? property.images : [];
+  const hasImages = images.length > 0;
+  const customFlags: string[] = (property as any).flags || [];
 
   const rawPrice = parseFloat(String(property.price).replace(/[^0-9.]/g, '')) || 0;
   const area = property.location.split(',')[0].trim();
@@ -228,48 +230,44 @@ const PropertyDetails = () => {
           </div>
         </header>
 
-        {/* Photo Grid (Airbnb Style) */}
-        <section aria-label={`Photo gallery for ${property.title}`} className="relative grid grid-cols-1 md:grid-cols-4 grid-rows-2 gap-2 h-[50vh] min-h-[400px] rounded-xl overflow-hidden mb-12">
-          {/* Hero Image — loaded eagerly, high priority */}
-          <div 
-            className="md:col-span-2 md:row-span-2 relative cursor-pointer group"
-            onClick={() => handleImageClick(0)}
-          >
-            <img 
-              src={images[0]} 
-              alt={`${property.title} in ${property.location} — main view`}
-              decoding="async"
-              className="w-full h-full object-cover transition-opacity duration-300 group-hover:brightness-90" 
-            />
-            <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
+        {/* Custom Flags */}
+        {customFlags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {customFlags.map((flag, i) => (
+              <span key={i} className="text-[11px] font-bold uppercase px-3 py-1.5 rounded-sm bg-amber-500 text-white tracking-wide">{flag}</span>
+            ))}
           </div>
+        )}
 
-          {/* Secondary Images Grid — lazy loaded */}
-          {images.slice(1, 5).map((img, idx) => (
-            <div 
-              key={idx} 
-              className="relative cursor-pointer group overflow-hidden"
-              onClick={() => handleImageClick(idx + 1)}
-            >
-              <img 
-                src={img} 
-                alt={`${property.title} — interior view ${idx + 2}`}
-                loading="lazy"
-                decoding="async"
-                className="w-full h-full object-cover transition-opacity duration-300 group-hover:brightness-90" 
-              />
-              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
+        {/* Photo Grid (Airbnb Style) */}
+        <section aria-label={`Photo gallery for ${property.title}`} className="relative rounded-xl overflow-hidden mb-12">
+          {hasImages ? (
+            <div className="relative grid grid-cols-1 md:grid-cols-4 grid-rows-2 gap-2 h-[50vh] min-h-[400px]">
+              {/* Hero Image */}
+              <div className="md:col-span-2 md:row-span-2 relative cursor-pointer group" onClick={() => handleImageClick(0)}>
+                <img src={images[0]} alt={`${property.title} in ${property.location} — main view`} decoding="async" className="w-full h-full object-cover transition-opacity duration-300 group-hover:brightness-90" />
+                <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
+              </div>
+              {/* Secondary Images */}
+              {images.slice(1, 5).map((img, idx) => (
+                <div key={idx} className="relative cursor-pointer group overflow-hidden" onClick={() => handleImageClick(idx + 1)}>
+                  <img src={img} alt={`${property.title} — interior view ${idx + 2}`} loading="lazy" decoding="async" className="w-full h-full object-cover transition-opacity duration-300 group-hover:brightness-90" />
+                  <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
+                </div>
+              ))}
+              <button onClick={() => setShowFullGallery(true)} aria-label={`View all ${images.length} photos`} className="absolute bottom-4 right-4 bg-background/90 hover:bg-background text-foreground text-sm font-medium px-4 py-2 rounded-lg border border-border shadow-sm flex items-center gap-2 transition-all min-h-[44px]">
+                <Grid className="w-4 h-4" aria-hidden="true" /> Show all photos
+              </button>
             </div>
-          ))}
-
-          {/* Show All Photos Button */}
-          <button 
-            onClick={() => setShowFullGallery(true)}
-            aria-label={`View all ${images.length} photos of ${property.title}`}
-            className="absolute bottom-4 right-4 bg-background/90 hover:bg-background text-foreground text-sm font-medium px-4 py-2 rounded-lg border border-border shadow-sm flex items-center gap-2 transition-all min-h-[44px]"
-          >
-            <Grid className="w-4 h-4" aria-hidden="true" /> Show all photos
-          </button>
+          ) : (
+            <div className="h-[40vh] min-h-[300px] flex flex-col items-center justify-center bg-muted rounded-xl gap-4">
+              <ImageOff className="w-14 h-14 text-muted-foreground/25" />
+              <div className="text-center">
+                <p className="font-bold text-muted-foreground/60 uppercase tracking-widest text-sm">Photos Coming Soon</p>
+                <p className="text-xs text-muted-foreground/40 mt-1">Images will be uploaded shortly</p>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Main Content Layout */}
@@ -321,6 +319,48 @@ const PropertyDetails = () => {
               </div>
             </div>
 
+            {/* Video Section */}
+            {(() => {
+              const allVideos: string[] = (property as any).video_urls?.length
+                ? (property as any).video_urls
+                : (property as any).video_url ? [(property as any).video_url] : [];
+              if (allVideos.length === 0) return null;
+              const renderVideo = (vurl: string, idx: number) => {
+                const isYoutube = vurl.includes('youtube.com') || vurl.includes('youtu.be');
+                const isVimeo = vurl.includes('vimeo.com');
+                if (isYoutube) {
+                  const ytId = vurl.match(/(?:v=|youtu\.be\/)([\w-]{11})/)?.[1];
+                  return (
+                    <div key={idx} className="aspect-video rounded-xl overflow-hidden bg-black">
+                      <iframe src={`https://www.youtube.com/embed/${ytId}`} title={`Property Video ${idx + 1}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="w-full h-full" />
+                    </div>
+                  );
+                }
+                if (isVimeo) {
+                  const vimeoId = vurl.match(/vimeo\.com\/(\d+)/)?.[1];
+                  return (
+                    <div key={idx} className="aspect-video rounded-xl overflow-hidden bg-black">
+                      <iframe src={`https://player.vimeo.com/video/${vimeoId}`} title={`Property Video ${idx + 1}`} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen className="w-full h-full" />
+                    </div>
+                  );
+                }
+                return (
+                  <video key={idx} src={vurl} controls className="w-full rounded-xl aspect-video bg-black" preload="metadata" />
+                );
+              };
+              return (
+                <div className="border-b border-border pb-8 mb-8">
+                  <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
+                    <Video className="w-5 h-5 text-primary" aria-hidden="true" />
+                    {allVideos.length === 1 ? 'Property Video' : `Property Videos (${allVideos.length})`}
+                  </h2>
+                  <div className="space-y-4">
+                    {allVideos.map((vurl, idx) => renderVideo(vurl, idx))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Amenities */}
             <div className="border-b border-border pb-8 mb-8">
               <h2 className="text-xl font-bold text-foreground mb-6">What this place offers</h2>
@@ -345,8 +385,14 @@ const PropertyDetails = () => {
                 <div className="p-6">
                   <div className="flex justify-between items-end mb-6">
                     <div>
-                      <span className="text-2xl font-bold text-foreground">{formatPrice(property.price)}</span>
-                      <span className="text-muted-foreground text-sm"> total</span>
+                      {(property as any).price_on_request ? (
+                        <span className="text-lg font-serif italic text-muted-foreground">Available upon request</span>
+                      ) : (
+                        <>
+                          <span className="text-2xl font-bold text-foreground">{formatPrice(property.price)}</span>
+                          <span className="text-muted-foreground text-sm"> total</span>
+                        </>
+                      )}
                     </div>
                   </div>
 

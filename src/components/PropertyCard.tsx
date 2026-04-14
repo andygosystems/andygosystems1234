@@ -1,6 +1,6 @@
 import { useState, MouseEvent } from 'react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
-import { ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MapPin, ImageOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCurrency } from '../context/CurrencyContext';
 
@@ -20,12 +20,14 @@ const PropertyCard = ({ property }: { property: Property }) => {
   const [currentImage, setCurrentImage] = useState(0);
   const { formatPrice } = useCurrency();
   
-  const images = (property.images && property.images.length > 0) ? property.images : ['/placeholder-property.jpg'];
+  const images = (property.images && property.images.length > 0) ? property.images : [];
+  const hasImages = images.length > 0;
+  const customFlags: string[] = (property as any).flags || [];
   const infoText = `${property.title} ${property.location}`.toLowerCase();
-  const showToday = /on show|open house|viewing today/i.test(infoText);
-  const priceReduced = /reduced|discount|offer/i.test(infoText);
-  const readyTitle = /title deed/i.test(infoText);
-  const verified = /verified/i.test(infoText);
+  const showToday = customFlags.some(f => /on show|open house|viewing/i.test(f)) || /on show|open house|viewing today/i.test(infoText);
+  const priceReduced = customFlags.some(f => /reduced|discount|offer/i.test(f)) || /reduced|discount|offer/i.test(infoText);
+  const readyTitle = customFlags.some(f => /title deed/i.test(f)) || /title deed/i.test(infoText);
+  const verified = customFlags.some(f => /verified/i.test(f)) || /verified/i.test(infoText);
 
   const nextImage = (e?: MouseEvent) => {
     e?.preventDefault();
@@ -56,7 +58,7 @@ const PropertyCard = ({ property }: { property: Property }) => {
       aria-label={`${property.title} in ${property.location} — ${property.type === 'Sale' ? 'For Sale' : 'For Rent'}`}
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
-        <div className="absolute top-2 left-2 flex gap-2 z-10">
+        <div className="absolute top-2 left-2 flex flex-wrap gap-1.5 z-10 max-w-[calc(100%-1rem)]">
           {showToday && (
             <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-sm bg-blue-600 text-white">On Show Today</span>
           )}
@@ -69,36 +71,46 @@ const PropertyCard = ({ property }: { property: Property }) => {
           {verified && (
             <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-sm bg-primary text-primary-foreground">Verified</span>
           )}
+          {customFlags.filter(f => !/on show|open house|viewing|reduced|discount|offer|title deed|verified/i.test(f)).map((flag, i) => (
+            <span key={i} className="text-[10px] font-bold uppercase px-2 py-1 rounded-sm bg-amber-500 text-white">{flag}</span>
+          ))}
         </div>
-        {/* Image Carousel */}
-        <AnimatePresence initial={false} mode="popLayout">
-          <motion.img
-            key={currentImage}
-            initial={{ opacity: 0, x: 100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -100 }}
-            transition={{ duration: 0.3 }}
-            src={images[currentImage]}
-            alt={`${property.title} in ${property.location}${images.length > 1 ? ` — photo ${currentImage + 1} of ${images.length}` : ''}`}
-            loading="lazy"
-            decoding="async"
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.2}
-            onDragEnd={handleDragEnd}
-            className="absolute inset-0 w-full h-full object-cover cursor-grab active:cursor-grabbing"
-          />
-        </AnimatePresence>
+        {/* Image Carousel or Coming Soon */}
+        {hasImages ? (
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.img
+              key={currentImage}
+              initial={{ opacity: 0, x: 100 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -100 }}
+              transition={{ duration: 0.3 }}
+              src={images[currentImage]}
+              alt={`${property.title} in ${property.location}${images.length > 1 ? ` — photo ${currentImage + 1} of ${images.length}` : ''}`}
+              loading="lazy"
+              decoding="async"
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.2}
+              onDragEnd={handleDragEnd}
+              className="absolute inset-0 w-full h-full object-cover cursor-grab active:cursor-grabbing"
+            />
+          </AnimatePresence>
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted gap-3">
+            <ImageOff className="w-10 h-10 text-muted-foreground/30" />
+            <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50">Photos Coming Soon</span>
+          </div>
+        )}
 
         {/* Status Badge - Minimal */}
-        <div className="absolute top-4 left-4 z-10">
+        <div className="absolute bottom-3 left-3 z-10">
           <span className="bg-background/90 backdrop-blur-md text-foreground text-[10px] font-bold px-3 py-1.5 uppercase tracking-widest border border-border/50 shadow-sm">
-            {property.type}
+            {property.type === 'Sale' ? 'For Sale' : 'For Rent'}
           </span>
         </div>
 
-        {/* Navigation Arrows - Only visible on hover (Desktop) */}
-        <div className="hidden md:flex absolute inset-0 items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20">
+        {/* Navigation Arrows - Only visible on hover when images exist */}
+        <div className={`hidden md:flex absolute inset-0 items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 ${!hasImages ? 'hidden' : ''}`}>
           <button 
             onClick={prevImage}
             aria-label={`Previous photo of ${property.title}`}
@@ -145,7 +157,11 @@ const PropertyCard = ({ property }: { property: Property }) => {
               <span className="text-foreground font-medium">{property.baths}</span> Baths
             </div>
           </div>
-          <p className="text-primary font-serif text-lg tracking-wide">{formatPrice(property.price)}</p>
+          {(property as any).price_on_request ? (
+            <p className="text-muted-foreground font-serif text-sm italic tracking-wide">Available upon request</p>
+          ) : (
+            <p className="text-primary font-serif text-lg tracking-wide">{formatPrice(property.price)}</p>
+          )}
         </div>
       </div>
     </motion.article>
