@@ -176,10 +176,13 @@ export const PropertyProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   const incrementVisits = (id: string | number) => {
-    // Analytics tracking could be an API call too
-    setProperties(prev => prev.map(p => 
+    // Optimistic local update for immediate UI feedback
+    setProperties(prev => prev.map(p =>
       String(p.id) === String(id) ? { ...p, visits: (p.visits || 0) + 1 } : p
     ));
+    // Persist to Supabase (fire and forget — non-blocking)
+    const visitorId = (() => { try { return localStorage.getItem('visitor_id') || undefined; } catch { return undefined; } })();
+    api.trackPropertyVisit(String(id), visitorId).catch(() => {});
   };
 
   const getStats = () => {

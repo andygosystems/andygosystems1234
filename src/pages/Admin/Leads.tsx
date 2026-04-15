@@ -1,18 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Mail, ExternalLink, MessageSquare, Phone,
-  Users, Bot, BarChart2, CheckCircle2, XCircle, Eye, RefreshCw
+  Users, Bot, BarChart2, CheckCircle2, XCircle, Eye, RefreshCw, TrendingUp
 } from 'lucide-react';
 import { useInquiry, Inquiry } from '../../context/InquiryContext';
 import { useProperty } from '../../context/PropertyContext';
 import { useChat, ChatSession } from '../../context/ChatContext';
+import { api } from '../../lib/api';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const GOLD = '#D4AF37';
 
-type Tab = 'pipeline' | 'leads' | 'conversations' | 'analytics';
+type Tab = 'pipeline' | 'leads' | 'conversations' | 'analytics' | 'visits';
 
 const STATUS_META: Record<string, { label: string; color: string; dot: string; col: string }> = {
   new:       { label: 'New Lead',          color: 'text-emerald-400', dot: 'bg-emerald-400', col: 'border-t-emerald-400' },
@@ -105,6 +106,17 @@ const Leads: React.FC = () => {
   const [selectedLead, setSelectedLead] = useState<Inquiry | null>(null);
   const [selectedSession, setSelectedSession] = useState<ChatSession | null>(null);
   const [chatSearch, setChatSearch] = useState('');
+  const [visitEvents, setVisitEvents] = useState<Array<{ property_id: string; visited_at: string; visitor_id: string | null }>>([]);
+  const [visitsLoading, setVisitsLoading] = useState(false);
+
+  useEffect(() => {
+    if (tab === 'visits') {
+      setVisitsLoading(true);
+      api.getPropertyVisitStats(7)
+        .then(data => setVisitEvents(data))
+        .finally(() => setVisitsLoading(false));
+    }
+  }, [tab]);
 
   const getProp = (id?: string) => id ? properties.find(p => String(p.id) === String(id)) : null;
   const openWhatsApp = (phone?: string) => {
@@ -152,9 +164,10 @@ const Leads: React.FC = () => {
 
   const tabs: Array<{ id: Tab; icon: React.ReactNode; label: string; count?: number }> = [
     { id: 'pipeline',      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>, label: 'Pipeline' },
-    { id: 'leads',         icon: <Users className="w-4 h-4" />,     label: 'Leads',         count: stats.newLeads },
-    { id: 'conversations', icon: <Bot className="w-4 h-4" />,       label: 'AI Chats',      count: allSessions.length },
-    { id: 'analytics',     icon: <BarChart2 className="w-4 h-4" />, label: 'Analytics'      },
+    { id: 'leads',         icon: <Users className="w-4 h-4" />,         label: 'Leads',     count: stats.newLeads },
+    { id: 'conversations', icon: <Bot className="w-4 h-4" />,           label: 'AI Chats',  count: allSessions.length },
+    { id: 'analytics',     icon: <BarChart2 className="w-4 h-4" />,     label: 'Analytics'  },
+    { id: 'visits',        icon: <TrendingUp className="w-4 h-4" />,    label: 'Visits'     },
   ];
 
   return (
@@ -635,6 +648,169 @@ const Leads: React.FC = () => {
                 </div>
               </div>
             </div>
+          </motion.div>
+        )}
+
+        {/* ── VISITS ── */}
+        {tab === 'visits' && (
+          <motion.div key="visits" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1">
+            {visitsLoading ? (
+              <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
+                <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading visit data…
+              </div>
+            ) : (() => {
+              const days7 = Array.from({ length: 7 }, (_, i) => {
+                const d = new Date(); d.setDate(d.getDate() - (6 - i)); d.setHours(0,0,0,0);
+                return d.toISOString().slice(0, 10);
+              });
+              const visitsByDay = days7.map(day =>
+                visitEvents.filter(v => v.visited_at.startsWith(day)).length
+              );
+              const maxBar = Math.max(...visitsByDay, 1);
+              const totalThisWeek = visitEvents.length;
+
+              const byProp: Record<string, number> = {};
+              visitEvents.forEach(v => {
+                byProp[v.property_id] = (byProp[v.property_id] || 0) + 1;
+              });
+              const topProps = Object.entries(byProp)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+              const maxProp = topProps[0]?.[1] || 1;
+
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+                  {/* 7-day bar chart */}
+                  <div className="lg:col-span-2 bg-card border border-border rounded-sm p-5">
+                    <div className="flex items-center justify-between mb-5">
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Property Views</p>
+                        <p className="text-2xl font-serif font-bold text-foreground mt-0.5">{totalThisWeek} this week</p>
+                      </div>
+                      <button
+                        onClick={() => { setVisitsLoading(true); api.getPropertyVisitStats(7).then(setVisitEvents).finally(() => setVisitsLoading(false)); }}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Refresh
+                      </button>
+                    </div>
+                    <div className="flex items-end gap-2 h-36">
+                      {visitsByDay.map((v, i) => {
+                        const d = new Date(); d.setDate(d.getDate() - (6 - i));
+                        return (
+                          <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                            <span className="text-[10px] font-bold text-muted-foreground">{v > 0 ? v : ''}</span>
+                            <div
+                              className="w-full rounded-sm transition-all"
+                              style={{ height: `${Math.max((v / maxBar) * 100, 4)}%`, background: i === 6 ? GOLD : `${GOLD}50` }}
+                            />
+                            <span className="text-[9px] text-muted-foreground">
+                              {d.toLocaleDateString('en', { weekday: 'short' })}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {visitEvents.length === 0 && (
+                      <p className="text-center text-sm text-muted-foreground mt-6">
+                        No visits recorded yet. Visit data is tracked from Supabase.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Top properties */}
+                  <div className="bg-card border border-border rounded-sm p-5">
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-4">Top Properties</p>
+                    {topProps.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-8">No data yet</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {topProps.map(([propId, count], i) => {
+                          const prop = properties.find(p => String(p.id) === propId);
+                          const pct = (count / maxProp) * 100;
+                          return (
+                            <div key={propId}>
+                              <div className="flex items-center justify-between text-xs mb-1">
+                                <span className="text-foreground font-medium truncate max-w-[150px]" title={prop?.title}>
+                                  {prop?.title || `Property ${propId.slice(0, 6)}…`}
+                                </span>
+                                <span className="font-bold shrink-0 ml-2" style={{ color: i === 0 ? GOLD : undefined }}>
+                                  {count} <Eye className="w-3 h-3 inline mb-0.5" />
+                                </span>
+                              </div>
+                              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all"
+                                  style={{ width: `${pct}%`, background: i === 0 ? GOLD : `${GOLD}60` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="mt-5 pt-4 border-t border-border space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Total (7 days)</span>
+                        <span className="font-bold text-foreground">{totalThisWeek}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Properties tracked</span>
+                        <span className="font-bold text-foreground">{topProps.length}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Today</span>
+                        <span className="font-bold text-foreground">{visitsByDay[6]}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recent visits feed */}
+                  <div className="lg:col-span-3 bg-card border border-border rounded-sm p-5">
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-3">Recent Activity</p>
+                    {visitEvents.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No visit events found.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-border">
+                              <th className="text-left pb-2 text-muted-foreground font-bold uppercase tracking-widest">Property</th>
+                              <th className="text-left pb-2 text-muted-foreground font-bold uppercase tracking-widest">Time</th>
+                              <th className="text-left pb-2 text-muted-foreground font-bold uppercase tracking-widest">Visitor</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {[...visitEvents].reverse().slice(0, 20).map((v, i) => {
+                              const prop = properties.find(p => String(p.id) === v.property_id);
+                              return (
+                                <tr key={i} className="hover:bg-muted/30 transition-colors">
+                                  <td className="py-2 pr-4">
+                                    <span className="font-medium text-foreground">
+                                      {prop?.title || `ID: ${v.property_id.slice(0,8)}…`}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 pr-4 text-muted-foreground">
+                                    {new Date(v.visited_at).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                  </td>
+                                  <td className="py-2 text-muted-foreground font-mono">
+                                    {v.visitor_id ? v.visitor_id.slice(0,8) + '…' : 'anon'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              );
+            })()}
           </motion.div>
         )}
 

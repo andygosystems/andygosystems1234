@@ -673,6 +673,36 @@ export const api = {
     return { url: publicUrl };
   },
 
+  // --- PROPERTY VISIT TRACKING ---
+  trackPropertyVisit: async (propertyId: string, visitorId?: string) => {
+    try {
+      await supabase.from('property_visits').insert([{
+        property_id: String(propertyId),
+        visitor_id: visitorId || null,
+      }]);
+    } catch {
+      // Non-critical — silently ignore tracking failures
+    }
+  },
+
+  getPropertyVisitStats: async (days = 7): Promise<Array<{ property_id: string; visited_at: string; visitor_id: string | null }>> => {
+    try {
+      const since = new Date();
+      since.setDate(since.getDate() - (days - 1));
+      since.setHours(0, 0, 0, 0);
+      const { data, error } = await supabase
+        .from('property_visits')
+        .select('property_id, visited_at, visitor_id')
+        .gte('visited_at', since.toISOString())
+        .order('visited_at', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    } catch (e: any) {
+      console.error('getPropertyVisitStats error:', e.message);
+      return [];
+    }
+  },
+
   // --- SCRAPER ---
   scrape: async (urls: string[]) => {
     try {

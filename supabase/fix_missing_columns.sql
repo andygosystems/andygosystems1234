@@ -51,12 +51,34 @@ ALTER TABLE public.leads DROP CONSTRAINT IF EXISTS leads_status_check;
 ALTER TABLE public.leads ADD CONSTRAINT leads_status_check
   CHECK (status IN ('new', 'contacted', 'qualified', 'closed', 'archived'));
 
+-- 8. Property visit tracking table (timestamped, persisted to Supabase)
+CREATE TABLE IF NOT EXISTS public.property_visits (
+  id          uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+  property_id TEXT        NOT NULL,
+  visitor_id  TEXT,
+  visited_at  TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.property_visits ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can insert property visit" ON public.property_visits;
+CREATE POLICY "Anyone can insert property visit" ON public.property_visits
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admins can read property visits" ON public.property_visits;
+CREATE POLICY "Admins can read property visits" ON public.property_visits
+  FOR SELECT USING (public.get_my_role() = 'admin');
+
+-- Ensure visits counter column exists on properties
+ALTER TABLE public.properties ADD COLUMN IF NOT EXISTS visits INTEGER DEFAULT 0;
+
 -- ============================================================
 -- VERIFICATION
 -- SELECT column_name FROM information_schema.columns
 --   WHERE table_name = 'leads' AND column_name IN ('message','property_id','subject');
 -- SELECT column_name FROM information_schema.columns
---   WHERE table_name = 'properties' AND column_name = 'video_url';
+--   WHERE table_name = 'properties' AND column_name IN ('video_url','visits');
 -- SELECT column_name FROM information_schema.columns
 --   WHERE table_name = 'projects' AND column_name = 'video_url';
+-- SELECT count(*) FROM public.property_visits;
 -- ============================================================
