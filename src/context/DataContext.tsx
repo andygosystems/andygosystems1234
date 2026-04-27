@@ -58,15 +58,26 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 const initialProjects: Project[] = [
   {
+    id: '3',
+    title: "InnoVetPro",
+    category: "Web Applications",
+    image: "/innovetpro-screenshot.png",
+    description: "A comprehensive Veterinary Management System designed to streamline clinic operations, patient records, appointments, and billing for veterinary practices.",
+    tags: ["React", "TypeScript", "DM Sans", "Plus Jakarta Sans", "Veterinary"],
+    client: "InnoVetPro",
+    date: "March 2025",
+    liveUrl: "https://www.innovetpro.com/"
+  },
+  {
     id: '2',
     title: "Krugerr Brendt International",
     category: "Luxury Real Estate",
-    image: "https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&q=80&w=2070", // Updated luxury home image
+    image: "/krugerrbrendt-screenshot.png",
     description: "Curating the World's Finest Properties. A premier platform for exclusive properties in Kenya and international locations.",
     tags: ["React", "Tailwind CSS", "Framer Motion", "Real Estate"],
     client: "Krugerr Brendt",
     date: "February 2026",
-    liveUrl: "https://krugerr-brendt-updated.vercel.app/"
+    liveUrl: "https://krugerrbrendt.com/"
   },
   {
     id: '1',
@@ -83,7 +94,7 @@ const initialProjects: Project[] = [
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem('andygo_projects_v5');
+    const saved = localStorage.getItem('andygo_projects_v6');
     return saved ? JSON.parse(saved) : initialProjects;
   });
 
@@ -103,7 +114,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useEffect(() => {
-    localStorage.setItem('andygo_projects_v5', JSON.stringify(projects));
+    localStorage.setItem('andygo_projects_v6', JSON.stringify(projects));
   }, [projects]);
 
   useEffect(() => {
