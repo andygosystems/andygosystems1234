@@ -1,0 +1,26 @@
+{
+  "name": "Krugerr Brendt Real Estate",
+  "short_name": "Krugerr Brendt",
+  "description": "Luxury properties for sale and rent in Kenya - Nairobi, Mombasa, and exclusive locations",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#D4AF37",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/logo-gold.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo-gold.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["real estate", "business"],
+  "screenshots": []
+}

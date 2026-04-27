@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://krugerrbrendt.com/sitemap.xml
+
+# Crawl delay for bots that respect it
+Crawl-delay: 1
+
+# Disallow admin and API routes
+Disallow: /admin/
+Disallow: /api/
+Disallow: /server/
+
+# Allow property pages
+Allow: /property/
+Allow: /buy
+Allow: /rent
+Allow: /contact
+Allow: /about
